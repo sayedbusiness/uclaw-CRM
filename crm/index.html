@@ -1,0 +1,1000 @@
+<!--
+  UCL COMMAND CENTER — GoHighLevel-style CRM for United Citizen Law
+  (Apex Growth Corp, July 2026). Single file, local-first, $0 license.
+  Features: email/password accounts (per-account data) · Dashboard · Conversations
+  (threaded SMS/email inbox) · Contacts pipeline · Dialer · Calendar · Automations
+  (trigger→action workflow builder that EXECUTES, incl. waits) · Reviews · Settings
+  (Twilio + webhook). Sends via n8n-webhook-relay first, then Twilio, then copy.
+  In the claude.ai preview, outbound network calls are sandboxed; host the file
+  (Vercel/Netlify/office PC) and they fire. Everything else runs here.
+  Note: browser localStorage auth is for evaluation — production uses server-side
+  auth (bcrypt) + a hosted DB. Passwords here are salted-hashed, never plaintext.
+-->
+<meta charset="utf-8">
+<title>UCL Command Center</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#08080a;--panel:#101014;--panel-2:#16161c;--panel-3:#1c1c24;--line:rgba(255,255,255,.09);
+  --gold:#d4a72c;--gold-hi:#f0cf6a;--gold-dim:rgba(212,167,44,.14);
+  --txt:#eceadf;--mut:#98937f;--mut2:#6f6b5c;--ok:#5abd8c;--ok-dim:rgba(90,189,140,.14);
+  --warn:#e8b355;--bad:#e8705a;--bad-dim:rgba(232,112,90,.14);--blue:#6ba9e8;
+  --serif:"Didot","Bodoni MT","Playfair Display",Palatino,Georgia,serif;
+  --sans:"Avenir Next","Avenir","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:.94rem;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.15}
+button{font:inherit;cursor:pointer;color:inherit}
+a{color:var(--gold-hi)}
+:focus-visible{outline:2px solid var(--gold-hi);outline-offset:2px;border-radius:4px}
+input,select,textarea{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:.55rem;color:var(--txt);padding:.6rem .75rem;font:inherit;font-size:.92rem}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none}
+label{display:block;font-size:.74rem;font-weight:700;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;margin:.7rem 0 .3rem}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--mut)}.small{font-size:.82rem}
+.hidden{display:none!important}
+.pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.7rem;font-weight:700;letter-spacing:.05em;border-radius:999px;padding:.16rem .6rem;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.pill.gold{background:var(--gold-dim);border-color:rgba(212,167,44,.35);color:var(--gold-hi)}
+.pill.hot{background:var(--bad-dim);border-color:rgba(232,112,90,.4);color:var(--bad)}
+.pill.ok{background:var(--ok-dim);border-color:rgba(90,189,140,.35);color:var(--ok)}
+.pill.warn{background:rgba(232,179,85,.12);border-color:rgba(232,179,85,.4);color:var(--warn)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;background:var(--panel-2);border:1px solid var(--line);color:var(--txt);border-radius:.6rem;padding:.55rem .95rem;font-weight:600;font-size:.86rem;min-height:2.4rem;transition:border-color .3s var(--ease),transform .2s var(--ease)}
+.btn:hover{border-color:rgba(212,167,44,.45)}
+.btn:active{transform:scale(.98)}
+.btn.gold{background:linear-gradient(155deg,var(--gold-hi),var(--gold));border:0;color:#161003;font-weight:800}
+.btn.ghost{background:none}
+.btn.danger{border-color:rgba(232,112,90,.4);color:var(--bad)}
+.btn.sm{padding:.35rem .7rem;min-height:2rem;font-size:.8rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:1.1rem 1.2rem}
+.twrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+/* ── AUTH ── */
+.authwrap{min-height:100vh;display:grid;place-items:center;padding:1.5rem;background:radial-gradient(120% 100% at 50% -10%,#15150f,#08080a)}
+.authcard{width:min(26rem,100%);background:var(--panel);border:1px solid var(--line);border-radius:1.3rem;padding:2rem;box-shadow:0 40px 80px -30px rgba(0,0,0,.7)}
+.authcard .logo{font-family:var(--serif);font-size:1.4rem;letter-spacing:.05em;text-align:center;margin-bottom:.3rem}
+.authcard .logo b{color:var(--gold-hi);font-weight:500}
+.authcard .tag{text-align:center;color:var(--mut);font-size:.85rem;margin-bottom:1.5rem}
+.authcard .btn.gold{width:100%;margin-top:1.2rem;min-height:2.9rem;font-size:1rem}
+.autherr{color:var(--bad);font-size:.85rem;margin-top:.8rem;display:none}
+.autherr.show{display:block}
+.authswap{text-align:center;margin-top:1.2rem;font-size:.85rem;color:var(--mut)}
+.authswap button{background:none;border:0;color:var(--gold-hi);font-weight:700;text-decoration:underline}
+.demohint{margin-top:1.3rem;padding:.7rem .9rem;background:var(--gold-dim);border:1px solid rgba(212,167,44,.3);border-radius:.6rem;font-size:.78rem;color:var(--gold-hi)}
+/* ── APP SHELL ── */
+.app{display:grid;grid-template-columns:15rem 1fr;min-height:100vh}
+.side{background:#0b0b0e;border-right:1px solid var(--line);padding:1.1rem .8rem;display:flex;flex-direction:column;gap:.2rem;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side .logo{font-family:var(--serif);font-size:1.1rem;letter-spacing:.04em;padding:.4rem .6rem 1rem}
+.side .logo b{color:var(--gold-hi);font-weight:500}
+.navi{display:flex;align-items:center;gap:.7rem;padding:.6rem .7rem;border-radius:.6rem;color:var(--mut);font-weight:600;font-size:.9rem;border:1px solid transparent;text-align:left;width:100%;background:none;position:relative}
+.navi:hover{color:var(--txt);background:var(--panel-2)}
+.navi.on{color:var(--gold-hi);background:var(--gold-dim);border-color:rgba(212,167,44,.3)}
+.navi svg{flex:none}
+.navi .badge{margin-left:auto;background:var(--bad);color:#fff;font-size:.65rem;font-weight:800;border-radius:999px;padding:.05rem .4rem;min-width:1.2rem;text-align:center}
+.side .spacer{flex:1}
+.side .acct{border-top:1px solid var(--line);padding-top:.8rem;margin-top:.4rem;font-size:.8rem;color:var(--mut)}
+.side .acct b{color:var(--txt);display:block;font-family:var(--sans);font-weight:700}
+.main{overflow:hidden;display:flex;flex-direction:column;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:1rem;padding:.9rem 1.4rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(8,8,10,.85);backdrop-filter:blur(12px);z-index:20}
+.topbar h1{font-size:1.3rem}
+.topbar .grow{flex:1}
+.content{padding:1.4rem;flex:1}
+@media(max-width:52rem){
+  .app{grid-template-columns:1fr}
+  .side{position:fixed;z-index:60;width:15rem;transform:translateX(-102%);transition:transform .4s var(--ease)}
+  .side.open{transform:none}
+  .menutoggle{display:inline-flex!important}
+}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:55;display:none}
+.scrim.show{display:block}
+.menutoggle{display:none;background:var(--panel-2);border:1px solid var(--line);border-radius:.5rem;width:2.4rem;height:2.4rem;align-items:center;justify-content:center}
+/* ── DASHBOARD ── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.9rem}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:1.1rem}
+.tile .big{font-family:var(--serif);font-size:2rem;color:var(--gold-hi);line-height:1.1}
+.tile.alarm{border-color:rgba(232,112,90,.5)}.tile.alarm .big{color:var(--bad)}
+.tile .lbl{font-size:.76rem;color:var(--mut);margin-top:.3rem}
+.two-col{display:grid;grid-template-columns:1.3fr 1fr;gap:1rem;margin-top:1rem}
+@media(max-width:60rem){.two-col{grid-template-columns:1fr}}
+.note{background:var(--panel-2);border:1px solid var(--line);border-radius:.6rem;padding:.55rem .8rem;font-size:.86rem;margin-bottom:.5rem}
+/* ── PIPELINE ── */
+.board{display:grid;grid-template-columns:repeat(5,minmax(13rem,1fr));gap:.8rem;overflow-x:auto;align-items:start}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:.7rem;min-height:7rem}
+.col h3{font-family:var(--sans);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);padding:.2rem .3rem .7rem;display:flex;justify-content:space-between}
+.col h3 .c{color:var(--gold-hi)}
+.lead{background:var(--panel-2);border:1px solid var(--line);border-radius:.75rem;padding:.7rem .75rem;margin-bottom:.55rem;cursor:pointer;transition:border-color .25s,transform .25s var(--ease)}
+.lead:hover{border-color:rgba(212,167,44,.5);transform:translateY(-1px)}
+.lead .nm{font-weight:700;color:#fff;display:flex;justify-content:space-between;gap:.4rem}
+.lead .meta{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem}
+.lead .mv{display:flex;gap:.3rem;margin-top:.5rem}
+.lead .mv button{flex:1;background:none;border:1px solid var(--line);border-radius:.4rem;color:var(--mut);font-size:.72rem;padding:.2rem}
+.lead .mv button:hover{color:var(--gold-hi);border-color:rgba(212,167,44,.4)}
+.searchrow{display:flex;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.searchrow input{max-width:20rem}
+/* ── CONVERSATIONS ── */
+.conv{display:grid;grid-template-columns:19rem 1fr;gap:0;border:1px solid var(--line);border-radius:1rem;overflow:hidden;height:calc(100vh - 8.5rem)}
+@media(max-width:52rem){.conv{grid-template-columns:1fr;height:auto}.conv.showthread .convlist{display:none}.conv:not(.showthread) .convthread{display:none}}
+.convlist{border-right:1px solid var(--line);overflow-y:auto;background:var(--panel)}
+.convitem{padding:.8rem .9rem;border-bottom:1px solid var(--line);cursor:pointer;display:flex;gap:.6rem;align-items:flex-start}
+.convitem:hover{background:var(--panel-2)}
+.convitem.on{background:var(--gold-dim);border-left:2px solid var(--gold)}
+.convitem .av{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;font-weight:700;color:var(--gold-hi);flex:none;font-size:.8rem}
+.convitem .cbody{flex:1;min-width:0}
+.convitem .cn{font-weight:700;color:#fff;display:flex;justify-content:space-between;gap:.3rem}
+.convitem .cn .t{font-size:.7rem;color:var(--mut);font-weight:400;flex:none}
+.convitem .cprev{font-size:.82rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.convitem .unread{width:.5rem;height:.5rem;border-radius:50%;background:var(--gold);flex:none;margin-top:.4rem}
+.convthread{display:flex;flex-direction:column;background:var(--bg)}
+.threadhead{padding:.8rem 1rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.7rem;background:var(--panel)}
+.threadhead .nm{font-weight:700;color:#fff;flex:1}
+.msgs{flex:1;overflow-y:auto;padding:1.1rem;display:flex;flex-direction:column;gap:.6rem}
+.msg{max-width:72%;padding:.6rem .85rem;border-radius:1rem;font-size:.9rem;line-height:1.45;position:relative}
+.msg .mt{font-size:.66rem;opacity:.6;margin-top:.25rem}
+.msg.in{align-self:flex-start;background:var(--panel-2);border:1px solid var(--line);border-bottom-left-radius:.3rem}
+.msg.out{align-self:flex-end;background:linear-gradient(155deg,rgba(212,167,44,.9),rgba(184,137,28,.85));color:#151004;border-bottom-right-radius:.3rem}
+.msg.note{align-self:center;background:none;border:1px dashed var(--line);color:var(--mut);font-size:.78rem;max-width:90%;text-align:center}
+.composer{border-top:1px solid var(--line);padding:.7rem;background:var(--panel)}
+.composer .tabs{display:flex;gap:.4rem;margin-bottom:.5rem}
+.composer .tabs button{font-size:.76rem;padding:.25rem .7rem;border-radius:999px;border:1px solid var(--line);background:none;color:var(--mut)}
+.composer .tabs button.on{background:var(--gold-dim);color:var(--gold-hi);border-color:rgba(212,167,44,.35)}
+.composer .row{display:flex;gap:.5rem;align-items:flex-end}
+.composer textarea{resize:none;min-height:2.6rem;max-height:8rem}
+.emptyc{display:grid;place-items:center;height:100%;color:var(--mut);text-align:center;padding:2rem}
+/* ── DIALER ── */
+.dialwrap{display:grid;grid-template-columns:20rem 1fr;gap:1.2rem}
+@media(max-width:60rem){.dialwrap{grid-template-columns:1fr}}
+.dialpad{background:var(--panel);border:1px solid var(--line);border-radius:1.2rem;padding:1.3rem;text-align:center}
+.dialnum{font-family:var(--serif);font-size:1.8rem;color:#fff;min-height:2.4rem;letter-spacing:.03em;margin-bottom:.3rem;word-break:break-all}
+.dialsub{font-size:.8rem;color:var(--mut);min-height:1.1rem;margin-bottom:1rem}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem}
+.keys button{aspect-ratio:1.4;border-radius:.8rem;background:var(--panel-2);border:1px solid var(--line);font-size:1.3rem;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0}
+.keys button:hover{border-color:var(--gold)}
+.keys button small{font-size:.5rem;color:var(--mut);letter-spacing:.1em}
+.dialact{display:flex;gap:.6rem}
+.dialcall{flex:1;background:linear-gradient(155deg,#5abd8c,#2e9c68);border:0;color:#04120b;font-weight:800;border-radius:.8rem;min-height:3rem;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.dialback{width:3rem;border-radius:.8rem;background:var(--panel-2);border:1px solid var(--line)}
+.callog .row{display:flex;align-items:center;gap:.7rem;padding:.6rem .3rem;border-bottom:1px solid var(--line)}
+.callog .av{width:2rem;height:2rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;color:var(--gold-hi);font-weight:700;font-size:.75rem;flex:none}
+/* ── AUTOMATIONS ── */
+.wf{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:1.1rem;margin-bottom:.9rem}
+.wf-head{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+.wf-head h3{font-size:1.1rem;color:#fff;flex:1;min-width:12rem}
+.toggle{width:2.8rem;height:1.6rem;border-radius:999px;background:var(--panel-3);border:1px solid var(--line);position:relative;flex:none;transition:background .3s}
+.toggle::after{content:"";position:absolute;top:.15rem;left:.15rem;width:1.15rem;height:1.15rem;border-radius:50%;background:var(--mut);transition:all .3s var(--ease)}
+.toggle.on{background:var(--ok-dim);border-color:var(--ok)}
+.toggle.on::after{left:1.3rem;background:var(--ok)}
+.wf-flow{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.9rem}
+.node{background:var(--panel-2);border:1px solid var(--line);border-radius:.6rem;padding:.4rem .7rem;font-size:.82rem;display:flex;align-items:center;gap:.4rem}
+.node.trig{border-color:rgba(212,167,44,.4);color:var(--gold-hi);background:var(--gold-dim)}
+.node .x{color:var(--mut2);font-weight:700;cursor:pointer;padding:0 .1rem}
+.node .x:hover{color:var(--bad)}
+.arrow{color:var(--mut2)}
+.wf-add{margin-top:.7rem;display:flex;gap:.5rem;flex-wrap:wrap}
+.runlog{max-height:16rem;overflow-y:auto}
+.runlog .r{font-size:.82rem;padding:.4rem .3rem;border-bottom:1px solid var(--line);display:flex;gap:.6rem}
+.runlog .r .tt{color:var(--mut);flex:none;font-size:.74rem}
+/* ── DRAWER / MODAL ── */
+.scrim2{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:none}
+.scrim2.show{display:block}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(32rem,100vw);background:var(--panel);border-left:1px solid var(--line);z-index:80;transform:translateX(102%);transition:transform .45s var(--ease);overflow-y:auto;padding:1.3rem}
+.drawer.show{transform:none}
+.dclose{position:absolute;top:1rem;right:1rem;background:var(--panel-2);border:1px solid var(--line);border-radius:99px;width:2.1rem;height:2.1rem}
+.modal{position:fixed;z-index:80;top:50%;left:50%;transform:translate(-50%,-48%);width:min(30rem,94vw);max-height:88vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:1.1rem;padding:1.5rem;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s var(--ease)}
+.modal.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
+.rowflex{display:flex;gap:.6rem;flex-wrap:wrap}.rowflex>*{flex:1;min-width:8rem}
+fieldset{border:1px solid var(--line);border-radius:.7rem;padding:.8rem .9rem;margin-top:.9rem}
+legend{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);padding-inline:.4rem}
+.toast{position:fixed;left:50%;bottom:1.4rem;transform:translate(-50%,16px);background:#15150f;border:1px solid rgba(212,167,44,.45);color:var(--gold-hi);padding:.65rem 1.2rem;border-radius:999px;font-weight:600;font-size:.85rem;z-index:100;opacity:0;pointer-events:none;transition:all .4s var(--ease);max-width:92vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.banner{background:var(--gold-dim);border:1px solid rgba(212,167,44,.3);border-radius:.7rem;padding:.6rem 1rem;font-size:.84rem;color:var(--gold-hi);margin-bottom:1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap}
+.sol-ok{color:var(--ok)}.sol-warn{color:var(--warn)}.sol-bad{color:var(--bad);font-weight:700}
+.big-serif{font-family:var(--serif);font-size:3rem;color:var(--gold-hi);line-height:1}
+
+/* lead temperature */
+.pill.temp-cold{background:rgba(107,169,232,.15);color:var(--blue)}
+.pill.temp-warm{background:rgba(232,179,85,.15);color:var(--warn)}
+.pill.temp-contacted{background:var(--ok-dim);color:var(--ok)}
+.pill.temp-closed{background:rgba(255,255,255,.06);color:var(--mut)}
+/* team dashboard */
+.teamgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.9rem;margin-bottom:1.2rem}
+.tmtile{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:1rem 1.1rem}
+.tmtile .big{font-family:var(--serif);font-size:1.9rem;color:var(--gold-hi);line-height:1}
+.tmtile .lbl{font-size:.74rem;color:var(--mut);margin-top:.3rem}
+.agentrow{display:flex;align-items:center;gap:.7rem;padding:.5rem .2rem;border-bottom:1px solid var(--line)}
+.agentrow .av{width:2.1rem;height:2.1rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;color:var(--gold-hi);font-weight:700;font-size:.72rem;flex:none}
+.agentrow .st{display:flex;gap:1.4rem;margin-inline-start:auto;text-align:center}
+.agentrow .st b{display:block;color:#fff;font-family:var(--serif);font-size:1.1rem}
+.agentrow .st span{font-size:.64rem;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+
+/* recording zone */
+.reczone{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.7rem 0}
+audio{filter:sepia(.2) saturate(.8)}
+/* incoming-call ring */
+.ringmodal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:rgba(6,7,8,.86);backdrop-filter:blur(8px)}
+.ringmodal[hidden]{display:none}
+.ringcard{text-align:center;padding:2.4rem 2rem;max-width:24rem;width:90%}
+.ringpulse{width:8rem;height:8rem;margin:0 auto 1.4rem;border-radius:50%;display:grid;place-items:center;background:var(--gold-dim);animation:ringpulse 1.4s ease-out infinite}
+@keyframes ringpulse{0%{box-shadow:0 0 0 0 rgba(212,167,44,.45)}70%{box-shadow:0 0 0 26px rgba(212,167,44,0)}100%{box-shadow:0 0 0 0 rgba(212,167,44,0)}}
+.ringav{width:5.4rem;height:5.4rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;color:var(--gold-hi);font-weight:700;font-size:1.7rem;font-family:var(--serif)}
+.ringlabel{font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-hi)}
+.ringcard h2{color:#fff;font-size:1.7rem;margin:.3rem 0}
+.ringnum{color:var(--mut);font-variant-numeric:tabular-nums;margin-bottom:1.6rem}
+.ringbtns{display:flex;gap:1.2rem;justify-content:center}
+.ringbtn{border:0;border-radius:999px;padding:.9rem 1.6rem;font-weight:800;font-size:.95rem;cursor:pointer;font-family:var(--sans)}
+.ringbtn.accept{background:var(--ok);color:#05110b}
+.ringbtn.decline{background:var(--bad);color:#1b0906}
+.ringbtn:active{transform:scale(.97)}
+</style>
+
+<!-- ══════════ AUTH GATE ══════════ -->
+<div class="authwrap" id="auth">
+  <div class="authcard">
+    <div class="logo">UCL <b>COMMAND CENTER</b></div>
+    <p class="tag" id="auth-tag">Sign in to your firm's account</p>
+    <div id="auth-fields">
+      <div id="firm-wrap" class="hidden">
+        <label for="au-firm">Firm name</label>
+        <input id="au-firm" autocomplete="organization" placeholder="United Citizen Law">
+      </div>
+      <label for="au-email">Email</label>
+      <input id="au-email" type="email" autocomplete="username" placeholder="you@uclaw.net">
+      <label for="au-pass">Password</label>
+      <input id="au-pass" type="password" autocomplete="current-password" placeholder="••••••••">
+      <div id="confirm-wrap" class="hidden">
+        <label for="au-pass2">Confirm password</label>
+        <input id="au-pass2" type="password" autocomplete="new-password" placeholder="••••••••">
+      </div>
+    </div>
+    <p class="autherr" id="auth-err"></p>
+    <button class="btn gold" id="auth-submit">Sign in</button>
+    <p class="authswap" id="auth-swap-line">New here? <button id="auth-swap">Create an account</button></p>
+    <div class="demohint">Demo: click <b>Sign in</b> with <b>demo@uclaw.net</b> / <b>demo1234</b> — a pre-loaded firm account with sample contacts, conversations, and live automations.</div>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div class="app hidden" id="app">
+  <div class="scrim" id="scrim"></div>
+  <aside class="side" id="side">
+    <div class="logo">UCL <b>COMMAND</b></div>
+    <button class="navi on" data-v="dash"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
+    <button class="navi" data-v="conv"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 8.6 8.6 0 0 1-3.9-.9L3 21l2-5.6a8.4 8.4 0 1 1 16-3.9Z"/></svg>Conversations<span class="badge hidden" id="conv-badge">0</span></button>
+    <button class="navi" data-v="pipe"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18M3 12h18M3 19h18"/></svg>Contacts</button>
+    <button class="navi" data-v="dial"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6.6 10.8a15.6 15.6 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.2 2.2Z"/></svg>Dialer</button>
+    <button class="navi" data-v="team"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</button>
+    <button class="navi" data-v="cal"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Calendar</button>
+    <button class="navi" data-v="auto"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Automations</button>
+    <button class="navi" data-v="rev"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5l2.9 6 6.6.7-4.9 4.4 1.4 6.4L12 16.7 6 20l1.4-6.4L2.5 9.2l6.6-.7 2.9-6Z"/></svg>Reviews</button>
+    <button class="navi" data-v="set"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 2.3 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.1A1.7 1.7 0 0 0 17 2.3a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H23a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>Settings</button>
+    <div class="spacer"></div>
+    <div class="acct"><b id="acct-firm">—</b><span id="acct-email">—</span><button class="btn ghost sm" id="logout" style="margin-top:.6rem;width:100%">Sign out</button></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="menutoggle" id="menutoggle" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <h1 id="view-title">Dashboard</h1>
+      <div class="grow"></div>
+      <button class="btn gold" id="newlead">+ New Contact</button>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="scrim2" id="scrim2"></div>
+<aside class="drawer" id="drawer" aria-label="Contact detail"><button class="dclose" id="dclose" aria-label="Close">✕</button><div id="drawer-body"></div></aside>
+<div class="modal" id="modal"><div id="modal-body"></div></div>
+<div class="ringmodal" id="ringmodal" hidden role="dialog" aria-modal="true" aria-label="Incoming call">
+  <div class="ringcard"><div class="ringpulse"><div class="ringav" id="ring-av">?</div></div><div class="ringlabel" id="ring-dir">Incoming call</div><h2 id="ring-name">Unknown</h2><div class="ringnum" id="ring-num"></div><div class="ringbtns"><button class="ringbtn decline" id="ring-decline">✕ Decline</button><button class="ringbtn accept" id="ring-accept">📞 Accept</button></div></div>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+var STAGES=['New','Contacted','Consult','Signed','Declined'];
+var CASE_LABELS={car:'Car accident',truck:'Truck accident',moto:'Motorcycle accident',rideshare:'Rideshare (Uber/Lyft) accident',ped:'Pedestrian or bicycle accident',dog:'Dog bite / animal attack',slip:'Slip and fall',other:'Something else'};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function now(){return new Date().toISOString();}
+function iso(t){return new Date(t).toISOString().slice(0,10);}
+function fmtPhone(p){var d=String(p||'').replace(/\D/g,'');return d.length===10?'('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6):p;}
+function ago(s){if(!s)return'—';var m=(Date.now()-new Date(s))/6e4;if(m<1)return'just now';if(m<60)return Math.round(m)+'m';if(m<1440)return Math.round(m/60)+'h';return Math.round(m/1440)+'d';}
+function initials(n){return String(n||'?').split(' ').map(function(x){return x[0];}).slice(0,2).join('').toUpperCase();}
+function median(a){if(!a.length)return null;var b=a.slice().sort(function(x,y){return x-y;});var m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2;}
+
+/* ══════════ AUTH ══════════ */
+var ACCKEY='uclcc_accounts', SESSKEY='uclcc_session';
+function accts(){try{return JSON.parse(localStorage.getItem(ACCKEY))||{};}catch(e){return{};}}
+function saveAccts(a){localStorage.setItem(ACCKEY,JSON.stringify(a));}
+async function hash(pw,salt){
+  var raw=salt+'::'+pw+'::uclcc';
+  try{
+    var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }catch(e){ /* file:// / insecure context fallback */
+    var h=5381;for(var i=0;i<raw.length;i++){h=((h<<5)+h+raw.charCodeAt(i))>>>0;}
+    return 'fb'+h.toString(16);
+  }
+}
+var mode='login';
+function setMode(m){
+  mode=m;
+  $('#firm-wrap').classList.toggle('hidden',m==='login');
+  $('#confirm-wrap').classList.toggle('hidden',m==='login');
+  $('#auth-tag').textContent=m==='login'?"Sign in to your firm's account":"Create your firm's account";
+  $('#auth-submit').textContent=m==='login'?'Sign in':'Create account';
+  $('#auth-swap-line').innerHTML=m==='login'?'New here? <button id="auth-swap">Create an account</button>':'Have an account? <button id="auth-swap">Sign in</button>';
+  $('#auth-swap').onclick=function(){setMode(m==='login'?'signup':'login');};
+  $('#auth-err').classList.remove('show');
+}
+$('#auth-swap').onclick=function(){setMode('signup');};
+function autherr(m){var e=$('#auth-err');e.textContent=m;e.classList.add('show');}
+$('#auth-submit').onclick=async function(){
+  var email=($('#au-email').value||'').trim().toLowerCase(), pw=$('#au-pass').value;
+  if(!email||!/.+@.+\..+/.test(email))return autherr('Enter a valid email.');
+  if(pw.length<6)return autherr('Password must be at least 6 characters.');
+  var A=accts();
+  if(mode==='signup'){
+    if(A[email])return autherr('An account with that email already exists.');
+    if(pw!==$('#au-pass2').value)return autherr('Passwords do not match.');
+    var salt=uid(), h=await hash(pw,salt);
+    A[email]={firm:($('#au-firm').value||'My Firm').trim(),salt:salt,hash:h,createdAt:now()};
+    saveAccts(A); seedData(email,A[email].firm); startSession(email);
+  }else{
+    var acc=A[email];
+    if(!acc){
+      if(email==='demo@uclaw.net' && pw==='demo1234'){ /* auto-provision demo */
+        var s2=uid(), h2=await hash(pw,s2);
+        A[email]={firm:'United Citizen Law',salt:s2,hash:h2,createdAt:now()};
+        saveAccts(A); seedData(email,'United Citizen Law',true); startSession(email); return;
+      }
+      return autherr('No account found. Create one first.');
+    }
+    var hh=await hash(pw,acc.salt);
+    if(hh!==acc.hash)return autherr('Incorrect password.');
+    startSession(email);
+  }
+};
+function startSession(email){localStorage.setItem(SESSKEY,email);boot(email);}
+$('#logout').onclick=function(){localStorage.removeItem(SESSKEY);location.reload();};
+
+/* ══════════ PER-ACCOUNT STORE ══════════ */
+var EMAIL=null, DKEY=null, S=null;
+function save(){localStorage.setItem(DKEY,JSON.stringify(S));}
+function load(){try{return JSON.parse(localStorage.getItem(DKEY));}catch(e){return null;}}
+function log(txt){S.activity.unshift({t:now(),txt:txt});S.activity=S.activity.slice(0,80);}
+
+function seedData(email,firm,demo){
+  var key='uclcc_data_'+email;
+  if(localStorage.getItem(key) && !demo) return;
+  var t=Date.now(),day=864e5,d;
+  if(demo){
+    d={
+      firm:firm, demo:true,
+      contacts:[
+        {id:'c1',demo:1,createdAt:new Date(t-1.5*36e5).toISOString(),name:'Maria Gonzalez',phone:'9165551201',email:'maria.g@email.com',caseType:'Car accident',language:'Español',source:'Website form',stage:'New',hot:false,accidentDate:iso(t-3*day),govClaim:false,tags:['spanish'],notes:[],firstResponseAt:null,assignedTo:''},
+        {id:'c2',demo:1,createdAt:new Date(t-27*36e5).toISOString(),name:'Ahmad Karimi',phone:'9165551342',email:'',caseType:'Rideshare (Uber/Lyft) accident',language:'Dari/Farsi',source:'Referral',stage:'Contacted',hot:false,accidentDate:iso(t-9*day),govClaim:false,tags:['dari'],notes:[],firstResponseAt:new Date(t-26.8*36e5).toISOString(),assignedTo:'Layla'},
+        {id:'c3',demo:1,createdAt:new Date(t-3*day).toISOString(),name:'Derek Chen',phone:'9165551458',email:'dchen@email.com',caseType:'Truck accident',language:'English',source:'LSA',stage:'Consult',hot:true,accidentDate:iso(t-12*day),govClaim:false,tags:['hot'],notes:[{t:now(),txt:'Commercial box truck — HOT. Sam paged.'}],firstResponseAt:new Date(t-3*day+7*6e4).toISOString(),assignedTo:'Omar'},
+        {id:'c4',demo:1,createdAt:new Date(t-42*day).toISOString(),name:'Fatima Al-Rashid',phone:'9165551577',email:'',caseType:'Slip and fall',language:'Arabic',source:'Google Ads',stage:'Signed',hot:false,accidentDate:iso(t-55*day),govClaim:false,tags:['arabic'],notes:[],firstResponseAt:new Date(t-42*day+3*6e4).toISOString(),assignedTo:'Layla'},
+        {id:'c5',demo:1,createdAt:new Date(t-210*day).toISOString(),name:'James Porter',phone:'9165551688',email:'jporter@email.com',caseType:'Pedestrian or bicycle accident',language:'English',source:'Phone call',stage:'Signed',hot:false,accidentDate:iso(t-670*day),govClaim:false,tags:[],notes:[{t:now(),txt:'SOL approaching — demand out, prep to file.'}],firstResponseAt:new Date(t-210*day+2*6e4).toISOString(),assignedTo:'Omar'}
+      ],
+      threads:{
+        c1:[{t:new Date(t-1.5*36e5).toISOString(),dir:'note',body:'Lead created from website wizard'},
+            {t:new Date(t-1.4*36e5).toISOString(),dir:'out',ch:'sms',body:'Hola Maria, somos el equipo de United Citizen Law — recibimos su mensaje sobre su accidente de auto. Le llamamos en minutos.'},
+            {t:new Date(t-1.2*36e5).toISOString(),dir:'in',ch:'sms',body:'Gracias! Sí, me chocaron por detrás en Watt Ave. Tengo dolor de cuello.'}],
+        c3:[{t:new Date(t-3*day).toISOString(),dir:'note',body:'HOT lead — commercial truck. Sam paged.'},
+            {t:new Date(t-3*day+6*6e4).toISOString(),dir:'out',ch:'sms',body:'Hi Derek, this is United Citizen Law. We got your message about the truck accident — expect our call in the next few minutes.'},
+            {t:new Date(t-3*day+11*6e4).toISOString(),dir:'in',ch:'sms',body:'Thank you, standing by. It was a box truck that ran the light.'},
+            {t:new Date(t-2.9*day).toISOString(),dir:'out',ch:'sms',body:'Consultation booked for Thursday 2pm. We will preserve the truck data right away.'}]
+      },
+      calls:[
+        {id:uid(),t:new Date(t-2.9*day).toISOString(),name:'Derek Chen',phone:'9165551458',dir:'out',disp:'Connected — booked consult',dur:'8m'},
+        {id:uid(),t:new Date(t-1.3*36e5).toISOString(),name:'Maria Gonzalez',phone:'9165551201',dir:'out',disp:'Left voicemail',dur:'1m'}
+      ],
+      appts:[
+        {id:uid(),t:iso(t+day)+'T14:00',name:'Derek Chen',type:'Signing consult',contactId:'c3'},
+        {id:uid(),t:iso(t+3*day)+'T10:30',name:'Maria Gonzalez',type:'Intake call',contactId:'c1'}
+      ],
+      reviews:[
+        {id:uid(),date:iso(t-9*day),platform:'Google',stars:5,name:'Rosa M.',responded:true},
+        {id:uid(),date:iso(t-31*day),platform:'Yelp',stars:5,name:'Hamid J.',responded:true}
+      ],
+      tasks:[
+        {id:uid(),title:'Chase Mercy General records for Fatima A.',due:iso(t+2*day),owner:'Layla',done:false},
+        {id:uid(),title:'File James P. complaint before SOL',due:iso(t+18*day),owner:'Sam',done:false}
+      ],
+      workflows:defaultWorkflows(),
+      enrollments:[], runlog:[], activity:[{t:now(),txt:'Demo firm loaded — welcome to Command Center.'}], outbox:[],
+      settings:{team:'Layla, Omar, Front Desk',protocol:'Team answers everything. Page Sam only for HOT cases (commercial vehicle, catastrophic, fatality) and unhappy-client alerts.',reviewLink:'https://g.page/r/your-google-review-link',webhook:'',twSid:'',twToken:'',twFrom:''}
+    };
+  }else{
+    d={firm:firm,contacts:[],threads:{},calls:[],appts:[],reviews:[],tasks:[],workflows:defaultWorkflows(),enrollments:[],runlog:[],activity:[{t:now(),txt:'Account created.'}],outbox:[],
+       settings:{team:'',protocol:'Team answers everything. Page the lead attorney only for HOT cases.',reviewLink:'',webhook:'',twSid:'',twToken:'',twFrom:''}};
+  }
+  localStorage.setItem(key,JSON.stringify(d));
+}
+function defaultWorkflows(){
+  return [
+    {id:'wf1',name:'Speed-to-Lead — instant reply',channel:'crm',active:true,trigger:{type:'lead_created'},actions:[
+      {type:'send_sms',tpl:'instant'},{type:'notify_team'},{type:'create_task',title:'Call new lead within 5 minutes'}]},
+    {id:'wf2',name:'No-Reply Follow-up (3 min)',channel:'crm',active:true,trigger:{type:'lead_created'},actions:[
+      {type:'wait',mins:3},{type:'send_sms',tpl:'nudge'}]},
+    {id:'wf3',name:'Signed → Review Request',channel:'crm',active:true,trigger:{type:'stage_changed',stage:'Signed'},actions:[
+      {type:'add_tag',tag:'review-requested'},{type:'send_sms',tpl:'review'}]},
+    {id:'wf4',name:'Signed → Medical-records request (make.com)',channel:'make',active:true,trigger:{type:'stage_changed',stage:'Signed'},actions:[{type:'webhook'}]},
+    {id:'wf5',name:'New lead → Enrich + log to Sheets (make.com)',channel:'make',active:true,trigger:{type:'lead_created'},actions:[{type:'webhook'}]},
+    {id:'wf6',name:'Nightly EOD → Slack (per teammate)',channel:'crm',active:true,trigger:{type:'eod_midnight'},actions:[{type:'eod_slack'}]}
+  ];
+}
+
+/* ══════════ SENDER (webhook-relay → Twilio → copy) ══════════ */
+function emit(event,extra){
+  var url=(S.settings.webhook||'').trim();
+  var payload=Object.assign({event:event,at:now()},extra||{});
+  if(!url){S.outbox.push(payload);return;}
+  try{fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){S.outbox.push(payload);save();});}
+  catch(e){S.outbox.push(payload);}
+}
+function sendSMS(contact,body,cb){
+  var to='+1'+String(contact.phone||'').replace(/\D/g,'').slice(-10);
+  var wh=(S.settings.webhook||'').trim();
+  emit('sms.request',{to:to,body:body,contact:{id:contact.id,name:contact.name}});
+  if(wh){cb&&cb('sent via n8n webhook');return;}
+  if(S.settings.twSid&&S.settings.twToken&&S.settings.twFrom){
+    try{fetch('https://api.twilio.com/2010-04-01/Accounts/'+encodeURIComponent(S.settings.twSid)+'/Messages.json',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Authorization':'Basic '+btoa(S.settings.twSid+':'+S.settings.twToken)},body:'To='+encodeURIComponent(to)+'&From='+encodeURIComponent(S.settings.twFrom)+'&Body='+encodeURIComponent(body)})
+      .then(function(r){cb&&cb(r.ok?'sent via Twilio':'Twilio error '+r.status);}).catch(function(){cb&&cb('blocked — copied');copy(body);});}
+    catch(e){cb&&cb('copied');copy(body);}
+    return;
+  }
+  copy(body); cb&&cb('copied (no sender configured)');
+}
+function copy(t){if(navigator.clipboard)navigator.clipboard.writeText(t).catch(function(){});}
+var TPL={
+  instant:function(c){return 'Hi '+first(c)+', this is the team at United Citizen Law — we received your message about your '+(c.caseType||'case').toLowerCase()+'. Expect our call within minutes. If you are at the ER, reply ER and we will come to you.';},
+  nudge:function(c){return 'Hi '+first(c)+', just checking you got our message — we are ready to help with your '+(c.caseType||'case').toLowerCase()+' whenever you are. Reply here or call (916) 800-8457.';},
+  review:function(c){return 'Thank you for trusting United Citizen Law, '+first(c)+'. If you have 60 seconds, a Google review helps other families find us: '+(S.settings.reviewLink||'[review link]');},
+  consult:function(c){return 'Hi '+first(c)+', a friendly reminder about your free consultation with United Citizen Law. Reply here if you need to reschedule — no problem at all.';}
+};
+function first(c){return (c.name||'').split(' ')[0]||'there';}
+function threadPush(cid,m){ if(!S.threads[cid])S.threads[cid]=[]; S.threads[cid].push(m); }
+
+/* ══════════ AUTOMATION ENGINE ══════════ */
+function fireTrigger(type,contact,extra){
+  S.workflows.forEach(function(wf){
+    if(!wf.active||wf.trigger.type!==type)return;
+    if(type==='stage_changed'&&wf.trigger.stage&&wf.trigger.stage!==(extra&&extra.stage))return;
+    if(wf.channel==='make'){ fireMake(wf,contact); } else { enroll(wf,contact); }
+  });
+}
+function enroll(wf,contact){
+  var en={id:uid(),wf:wf.id,contactId:contact.id,step:0,nextAt:Date.now()};
+  S.enrollments.push(en);
+  runLog(wf.name+' → enrolled '+contact.name);
+  processEnrollment(en);
+}
+function processEnrollment(en){
+  var wf=S.workflows.find(function(w){return w.id===en.wf;});
+  var c=S.contacts.find(function(x){return x.id===en.contactId;});
+  if(!wf||!c){removeEnroll(en);return;}
+  while(en.step<wf.actions.length){
+    var a=wf.actions[en.step];
+    if(a.type==='wait'){
+      en.nextAt=Date.now()+(a.mins||1)*60000;
+      en.step++; save(); return; /* resume later */
+    }
+    doAction(a,c,wf);
+    en.step++;
+  }
+  removeEnroll(en); save();
+}
+function doAction(a,c,wf){
+  if(a.type==='send_sms'){var body=(TPL[a.tpl]||TPL.instant)(c);threadPush(c.id,{t:now(),dir:'out',ch:'sms',body:body,auto:wf.name});sendSMS(c,body);runLog(wf.name+' → SMS to '+c.name);}
+  else if(a.type==='send_email'){runLog(wf.name+' → email queued to '+c.name);emit('email.request',{to:c.email,contact:{id:c.id,name:c.name}});}
+  else if(a.type==='notify_team'){runLog(wf.name+' → team notified re '+c.name+(c.hot?' (HOT — Sam paged)':''));emit('team.notify',{contact:{id:c.id,name:c.name,hot:c.hot}});}
+  else if(a.type==='create_task'){S.tasks.push({id:uid(),title:(a.title||'Follow up')+' — '+c.name,due:iso(Date.now()+864e5),owner:'',done:false});runLog(wf.name+' → task created for '+c.name);}
+  else if(a.type==='move_stage'){var i=STAGES.indexOf(a.stage);if(i>-1){c.stage=a.stage;runLog(wf.name+' → moved '+c.name+' to '+a.stage);}}
+  else if(a.type==='add_tag'){c.tags=c.tags||[];if(c.tags.indexOf(a.tag)<0)c.tags.push(a.tag);runLog(wf.name+' → tagged '+c.name+' "'+a.tag+'"');}
+  else if(a.type==='webhook'){emit('workflow.webhook',{contact:{id:c.id,name:c.name},workflow:wf.name});runLog(wf.name+' → webhook fired for '+c.name);}
+}
+function runLog(txt){S.runlog.unshift({t:now(),txt:txt});S.runlog=S.runlog.slice(0,120);}
+function removeEnroll(en){S.enrollments=S.enrollments.filter(function(x){return x.id!==en.id;});}
+function tickEnrollments(){
+  var due=S.enrollments.filter(function(e){return e.nextAt<=Date.now();});
+  if(!due.length)return;
+  due.forEach(processEnrollment);
+  save();
+  if(curView==='auto')renderAuto();
+  if(curView==='conv')renderConv();
+  updateBadges();
+}
+setInterval(tickEnrollments,4000);
+setInterval(pollInbound,6000);
+setInterval(eodScheduler,60000);
+document.addEventListener('click',function(e){
+  if(e.target.closest&&e.target.closest('#ring-accept')){ var c=ring.contact; logInbound(ring.num,$('#ring-name').textContent,'Connected — inbound',null); endRing(); if(c){activeThread=c.id;go('conv');setTimeout(function(){openThread(c.id);},30);} else toast('Call connected'); }
+  if(e.target.closest&&e.target.closest('#ring-decline')){ logInbound(ring.num,$('#ring-name').textContent,'Declined',null); endRing(); toast('Call declined'); }
+});
+
+/* ══════════ VIEWS ══════════ */
+var curView='dash', TITLES={dash:'Dashboard',conv:'Conversations',pipe:'Contacts',dial:'Dialer',cal:'Calendar',auto:'Automations',rev:'Reviews',set:'Settings',team:'Team'};
+function go(v){
+  curView=v;
+  $$('.navi').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});
+  $('#view-title').textContent=TITLES[v];
+  $('#newlead').style.display=(v==='pipe'||v==='dash'||v==='conv')?'':'none';
+  $('#side').classList.remove('open');$('#scrim').classList.remove('show');
+  render();
+}
+$$('.navi').forEach(function(b){b.onclick=function(){go(b.dataset.v);};});
+$('#menutoggle').onclick=function(){$('#side').classList.toggle('open');$('#scrim').classList.toggle('show');};
+$('#scrim').onclick=function(){$('#side').classList.remove('open');this.classList.remove('show');};
+function render(){
+  var C=$('#content');
+  if(curView==='dash')renderDash(C);
+  else if(curView==='conv')renderConv(C);
+  else if(curView==='pipe')renderPipe(C);
+  else if(curView==='dial')renderDial(C);
+  else if(curView==='cal')renderCal(C);
+  else if(curView==='auto')renderAuto(C);
+  else if(curView==='rev')renderRev(C);
+  else if(curView==='set')renderSet(C);
+  else if(curView==='team')renderTeam(C);
+  updateBadges();
+}
+function updateBadges(){
+  var unread=0;Object.keys(S.threads).forEach(function(cid){var th=S.threads[cid];var last=th[th.length-1];if(last&&last.dir==='in'&&!last.read)unread++;});
+  var b=$('#conv-badge');b.textContent=unread;b.classList.toggle('hidden',unread===0);
+}
+
+/* ── DASHBOARD ── */
+function renderDash(C){
+  var wk=Date.now()-7*864e5;
+  var newWk=S.contacts.filter(function(l){return new Date(l.createdAt)>wk;}).length;
+  var resp=S.contacts.filter(function(l){return l.firstResponseAt;}).slice(-30).map(function(l){return(new Date(l.firstResponseAt)-new Date(l.createdAt))/6e4;});
+  var med=median(resp);
+  var signed=S.contacts.filter(function(l){return l.stage==='Signed';}).length;
+  var decided=S.contacts.filter(function(l){return l.stage==='Signed'||l.stage==='Declined';}).length;
+  var gRev=S.reviews.filter(function(r){return r.platform==='Google';}).map(function(r){return new Date(r.date);});
+  var ds=gRev.length?Math.floor((Date.now()-Math.max.apply(null,gRev))/864e5):null;
+  var solSoon=S.contacts.filter(function(l){return l.stage==='Signed'&&solDays(l)!=null&&solDays(l)<=90;}).length;
+  var activeWf=S.workflows.filter(function(w){return w.active;}).length;
+  var tiles=[
+    {b:newWk,l:'new leads · 7 days'},
+    {b:med==null?'—':(med<60?Math.round(med)+'m':Math.round(med/60)+'h'),l:'median speed-to-lead',alarm:med!=null&&med>5},
+    {b:decided?Math.round(signed/decided*100)+'%':'—',l:'lead → signed'},
+    {b:ds==null?'—':ds,l:'days since Google review',alarm:ds!=null&&ds>=14},
+    {b:solSoon,l:'SOL ≤ 90 days',alarm:solSoon>0},
+    {b:activeWf,l:'automations live'}
+  ];
+  var att=[];
+  S.contacts.forEach(function(l){
+    if(l.stage==='New'&&!l.firstResponseAt)att.push({p:1,txt:'⏱ '+l.name+' ('+l.caseType+') not yet contacted — '+ago(l.createdAt)+' ago',id:l.id});
+    if(l.hot&&l.stage!=='Signed'&&l.stage!=='Declined')att.push({p:0,txt:'🔥 HOT: '+l.name+' — Sam paged per protocol',id:l.id});
+    var d=solDays(l);if(l.stage==='Signed'&&d!=null&&d<=90)att.push({p:0,txt:'⚖️ SOL: '+l.name+' — '+d+' days to file',id:l.id});
+  });
+  if(ds!=null&&ds>=14)att.push({p:2,txt:'⭐ '+ds+' days without a Google review — ask a happy client today'});
+  att.sort(function(a,b){return a.p-b.p;});
+  C.innerHTML=
+    (S.demo?'<div class="banner"><span>Demo firm loaded — sample contacts, conversations & live automations. Clear it when you go live.</span><button class="btn sm" id="cleardemo">Clear demo data</button></div>':'')+
+    '<div class="tiles">'+tiles.map(function(t){return '<div class="tile'+(t.alarm?' alarm':'')+'"><span class="big num">'+esc(t.b)+'</span><div class="lbl">'+esc(t.l)+'</div></div>';}).join('')+'</div>'+
+    '<div class="two-col"><div class="card"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.8rem">Needs attention</h3>'+
+      (att.length?att.slice(0,8).map(function(a){return '<div class="note"'+(a.id?' data-open="'+a.id+'" style="cursor:pointer"':'')+'>'+esc(a.txt)+'</div>';}).join(''):'<p class="muted small">Nothing urgent. Well run.</p>')+'</div>'+
+    '<div class="card"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.8rem">Automation activity</h3>'+
+      (S.runlog.length?S.runlog.slice(0,9).map(function(r){return '<div class="note small"><span class="muted">'+ago(r.t)+'</span> — '+esc(r.txt)+'</div>';}).join(''):'<p class="muted small">Automations will log here as they run.</p>')+'</div></div>';
+  var cd=$('#cleardemo');if(cd)cd.onclick=clearDemo;
+}
+function clearDemo(){
+  S.contacts=S.contacts.filter(function(c){return !c.demo;});S.threads={};S.calls=[];S.appts=[];S.reviews=S.reviews.filter(function(r){return !r.demo;});S.tasks=[];S.demo=false;S.runlog=[];S.enrollments=[];log('Demo data cleared — live.');save();render();toast('Demo data cleared');
+}
+
+/* ── PIPELINE ── */
+function renderPipe(C){
+  C.innerHTML='<div class="searchrow"><input id="psearch" placeholder="Search name, phone, case, tag…"><span class="muted small" id="pcount"></span></div><div class="board" id="board"></div>';
+  $('#psearch').oninput=drawBoard; drawBoard();
+}
+function drawBoard(){
+  var q=($('#psearch').value||'').toLowerCase();
+  var list=S.contacts.filter(function(l){return !q||((l.name+' '+l.phone+' '+l.caseType+' '+l.language+' '+(l.tags||[]).join(' ')).toLowerCase().indexOf(q)>-1);});
+  $('#pcount').textContent=list.length+' contact'+(list.length===1?'':'s');
+  $('#board').innerHTML=STAGES.map(function(st){
+    var items=list.filter(function(l){return l.stage===st;});
+    return '<div class="col"><h3>'+esc(st)+' <span class="c num">'+items.length+'</span></h3>'+items.map(leadCard).join('')+'</div>';
+  }).join('');
+}
+function leadCard(l){
+  var i=STAGES.indexOf(l.stage),d=solDays(l);
+  return '<div class="lead" data-open="'+l.id+'"><div class="nm"><span>'+esc(l.name)+'</span>'+(l.hot?'<span class="pill hot">HOT</span>':'')+tempBadge(l.temp)+'</div>'+
+    '<div class="meta"><span class="pill gold">'+esc(l.caseType)+'</span><span class="pill">'+esc(l.language)+'</span>'+(l.stage==='Signed'&&d!=null?'<span class="pill '+(d<=90?'hot':d<=180?'warn':'ok')+'">SOL '+d+'d</span>':'')+'</div>'+
+    '<div class="mv">'+(i>0?'<button data-mv="-1" data-id="'+l.id+'">◀</button>':'')+'<button data-conv="'+l.id+'" title="Message">💬</button><button data-call="'+l.id+'" title="Call">📞</button>'+(i<STAGES.length-1?'<button data-mv="1" data-id="'+l.id+'">▶</button>':'')+'</div></div>';
+}
+
+/* ── CONVERSATIONS ── */
+var activeThread=null, composeCh='sms';
+function convContacts(){
+  return S.contacts.slice().sort(function(a,b){return lastMsgT(b.id)-lastMsgT(a.id);});
+}
+function lastMsgT(cid){var th=S.threads[cid];if(!th||!th.length)return 0;return new Date(th[th.length-1].t).getTime();}
+function renderConv(C){
+  if(C){C.innerHTML='<div class="conv" id="conv"><div class="convlist" id="convlist"></div><div class="convthread" id="convthread"></div></div>';}
+  var list=$('#convlist'); if(!list)return;
+  var cs=convContacts();
+  list.innerHTML=cs.map(function(c){
+    var th=S.threads[c.id]||[],last=th[th.length-1];
+    var unread=last&&last.dir==='in'&&!last.read;
+    var prev=last?(last.dir==='out'?'You: ':last.dir==='note'?'• ':'')+last.body:'No messages yet';
+    return '<div class="convitem'+(activeThread===c.id?' on':'')+'" data-thread="'+c.id+'"><div class="av">'+esc(initials(c.name))+'</div><div class="cbody"><div class="cn"><span>'+esc(c.name)+'</span><span class="t">'+(last?ago(last.t):'')+'</span></div><div class="cprev">'+esc(prev)+'</div></div>'+(unread?'<div class="unread"></div>':'')+'</div>';
+  }).join('')||'<p class="muted small" style="padding:1rem">No contacts yet. Add one with “+ New Contact”.</p>';
+  $$('#convlist .convitem').forEach(function(el){el.onclick=function(){openThread(el.dataset.thread);};});
+  if(activeThread)drawThread(); else $('#convthread').innerHTML='<div class="emptyc"><div><div style="font-size:2rem;margin-bottom:.5rem">💬</div>Select a conversation to view messages,<br>or start one from a contact.</div></div>';
+}
+function openThread(cid){
+  activeThread=cid;
+  var th=S.threads[cid]||[];th.forEach(function(m){if(m.dir==='in')m.read=true;});save();
+  $('#conv').classList.add('showthread');
+  renderConv(); updateBadges();
+}
+function drawThread(){
+  var c=S.contacts.find(function(x){return x.id===activeThread;});if(!c)return;
+  var th=S.threads[c.id]||[];
+  $('#convthread').innerHTML=
+    '<div class="threadhead"><button class="btn ghost sm" id="convback" style="display:none">←</button><div class="av" style="width:2.2rem;height:2.2rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;color:var(--gold-hi);font-weight:700">'+esc(initials(c.name))+'</div><div class="nm">'+esc(c.name)+'<div class="small muted">'+esc(fmtPhone(c.phone))+' · '+esc(c.language)+'</div></div><button class="btn sm" data-call="'+c.id+'">📞 Call</button><button class="btn sm" data-open="'+c.id+'">Open</button></div>'+
+    '<div class="msgs" id="msgs">'+th.map(function(m){
+      if(m.dir==='note')return '<div class="msg note">'+esc(m.body)+'</div>';
+      return '<div class="msg '+m.dir+'">'+esc(m.body)+'<div class="mt">'+(m.auto?'⚙ '+esc(m.auto)+' · ':'')+(m.ch||'sms').toUpperCase()+' · '+ago(m.t)+' ago</div></div>';
+    }).join('')+'</div>'+
+    '<div class="composer"><div class="tabs"><button class="'+(composeCh==='sms'?'on':'')+'" data-ch="sms">SMS</button><button class="'+(composeCh==='email'?'on':'')+'" data-ch="email">Email</button><button data-ch="note">Note</button><button class="btn sm" id="simreply" style="margin-left:auto">↩ Simulate reply</button></div>'+
+    '<div class="row"><textarea id="composebox" placeholder="Type a message… (Enter to send)"></textarea><button class="btn gold" id="sendmsg">Send</button></div></div>';
+  var m=$('#msgs');m.scrollTop=m.scrollHeight;
+  var bk=$('#convback');if(window.innerWidth<=832){bk.style.display='';bk.onclick=function(){activeThread=null;$('#conv').classList.remove('showthread');renderConv();};}
+  $$('.composer .tabs [data-ch]').forEach(function(b){b.onclick=function(){if(b.id==='simreply')return;composeCh=b.dataset.ch;drawThread();};});
+  $('#sendmsg').onclick=sendCompose;
+  $('#composebox').onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendCompose();}};
+  $('#simreply').onclick=function(){var samples=['Okay, thank you!','Yes that works.','When can we talk?','I have photos of the scene.','Appreciate the quick response.'];threadPush(c.id,{t:now(),dir:'in',ch:'sms',body:samples[Math.floor(Math.random()*samples.length)],read:activeThread===c.id});save();drawThread();renderConv();toast('Inbound reply received');};
+}
+function sendCompose(){
+  var box=$('#composebox'),v=(box.value||'').trim();if(!v)return;
+  var c=S.contacts.find(function(x){return x.id===activeThread;});
+  if(composeCh==='note'){threadPush(c.id,{t:now(),dir:'note',body:v});}
+  else{threadPush(c.id,{t:now(),dir:'out',ch:composeCh,body:v});
+    if(!c.firstResponseAt){c.firstResponseAt=now();}
+    if(composeCh==='sms')sendSMS(c,v,function(st){toast('SMS '+st);});else emit('email.request',{to:c.email,body:v,contact:{id:c.id,name:c.name}});
+  }
+  box.value='';save();drawThread();renderConv();
+}
+
+/* ── DIALER ── */
+var dialNum='';
+function renderDial(C){
+  C.innerHTML='<div class="dialwrap"><div class="dialpad"><div class="dialnum" id="dialnum">Enter a number</div><div class="dialsub" id="dialsub"></div><div class="keys" id="keys"></div><div class="dialact"><button class="dialcall" id="docall"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.6 15.6 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.2 2.2Z"/></svg>Call</button><button class="dialback" id="doback">⌫</button></div><p class="small muted" style="margin-top:.8rem">Click-to-call opens your phone/softphone (or Twilio Voice when configured), then logs the call.</p></div>'+
+    '<div><div class="card" style="margin-bottom:1rem"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.8rem">Quick dial — contacts</h3><div id="quickdial"></div></div>'+
+    '<div class="card callog"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.5rem">Recent calls</h3><div id="callrows"></div></div></div></div>';
+  var keys=[['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
+  $('#keys').innerHTML=keys.map(function(k){return '<button data-k="'+k[0]+'">'+k[0]+'<small>'+k[1]+'</small></button>';}).join('');
+  $$('#keys button').forEach(function(b){b.onclick=function(){dialNum+=b.dataset.k;drawDial();};});
+  $('#doback').onclick=function(){dialNum=dialNum.slice(0,-1);drawDial();};
+  $('#docall').onclick=function(){placeCall(dialNum);};
+  var sim=document.createElement('button');sim.className='btn sm';sim.style.cssText='margin-top:.7rem;width:100%';sim.textContent='\u{1F4DE} Simulate incoming call';sim.onclick=simulateInbound;var dp=$('.dialpad');if(dp)dp.appendChild(sim);
+  $('#quickdial').innerHTML=S.contacts.slice(0,8).map(function(c){return '<div class="row" style="display:flex;align-items:center;gap:.7rem;padding:.5rem .2rem;border-bottom:1px solid var(--line)"><div class="av" style="width:2rem;height:2rem;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;color:var(--gold-hi);font-weight:700;font-size:.75rem">'+esc(initials(c.name))+'</div><div style="flex:1"><b style="color:#fff">'+esc(c.name)+'</b><div class="small muted">'+esc(fmtPhone(c.phone))+'</div></div><button class="btn sm gold" data-qc="'+c.id+'">Call</button></div>';}).join('')||'<p class="muted small">No contacts yet.</p>';
+  $$('#quickdial [data-qc]').forEach(function(b){b.onclick=function(){var c=S.contacts.find(function(x){return x.id===b.dataset.qc;});dialNum=c.phone;placeCall(c.phone,c);};});
+  drawDial();drawCallog();
+}
+function drawDial(){var el=$('#dialnum');if(!el)return;el.textContent=dialNum?fmtPhone(dialNum):'Enter a number';var c=matchContact(dialNum);$('#dialsub').textContent=c?c.name:'';}
+function matchContact(num){var d=String(num).replace(/\D/g,'').slice(-10);return S.contacts.find(function(c){return String(c.phone).replace(/\D/g,'').slice(-10)===d;});}
+function placeCall(num,contact){
+  var d=String(num).replace(/\D/g,'');if(d.length<10){toast('Enter a 10-digit number');return;}
+  recState={rec:null,chunks:[],data:null};
+  contact=contact||matchContact(num);
+  try{window.location.href='tel:+1'+d;}catch(e){}
+  openModal('<h2 style="font-size:1.3rem;margin-bottom:.3rem">Call '+(contact?esc(contact.name):fmtPhone(d))+'</h2><p class="muted small" style="margin-bottom:1rem">Calling '+fmtPhone(d)+'… Log the outcome when you hang up.</p>'+
+    '<label for="cd-disp">Disposition</label><select id="cd-disp"><option>Connected — booked consult</option><option>Connected — follow-up needed</option><option>Left voicemail</option><option>No answer</option><option>Wrong number</option><option>Not a fit — referred out</option></select>'+
+    '<div class="rowflex"><div><label for="cd-dur">Duration</label><input id="cd-dur" placeholder="e.g., 6m"></div><div><label for="cd-agent">Logged by</label><select id="cd-agent">'+agentOpts(S.settings.agent)+'</select></div></div>'+'<div class="reczone"><button class="btn sm" id="cd-rec" type="button">\u{1F534} Record call</button> <span class="small muted" id="cd-recst">Records from your mic (demo). Live calls record via Twilio.</span></div>'+'<label for="cd-recurl">Twilio recording URL (production, optional)</label><input id="cd-recurl" placeholder="https://api.twilio.com/...Recordings/RE...">'+'<div class="rowflex" style="margin-top:1rem"><button class="btn gold" id="cd-save">Log call</button><button class="btn ghost" id="cd-cancel">Cancel</button></div>');
+  wireRecorder();
+  $('#cd-save').onclick=function(){
+    S.calls.unshift({id:uid(),t:now(),name:contact?contact.name:fmtPhone(d),phone:d,dir:'out',disp:$('#cd-disp').value,dur:$('#cd-dur').value||'—',agent:$('#cd-agent').value||S.settings.agent,recording:recState.data||($('#cd-recurl').value||'').trim()});
+    if(contact&&!contact.firstResponseAt&&$('#cd-disp').value.indexOf('Connected')===0){contact.firstResponseAt=now();}
+    log('Call logged: '+(contact?contact.name:fmtPhone(d))+' — '+$('#cd-disp').value);save();closeModal();dialNum='';if(curView==='dial')renderDial($('#content'));toast('Call logged');};
+  $('#cd-cancel').onclick=closeModal;
+}
+function drawCallog(){$('#callrows').innerHTML=S.calls.slice(0,12).map(function(c){return '<div class="row"><div class="av">'+(c.dir==='in'?'\u2199':'\u2197')+'</div><div style="flex:1"><b style="color:#fff">'+esc(c.name)+'</b><div class="small muted">'+esc(c.disp)+' · '+esc(c.dur)+(c.agent?' · '+esc(c.agent):'')+'</div>'+(c.recording?'<audio controls preload="none" src="'+esc(c.recording)+'" style="height:1.9rem;max-width:11rem;margin-top:.3rem"></audio>':'')+'</div><span class="small muted">'+ago(c.t)+'</span></div>';}).join('')||'<p class="muted small">No calls logged yet.</p>';}
+
+/* ── CALENDAR ── */
+function renderCal(C){
+  var up=S.appts.slice().sort(function(a,b){return a.t.localeCompare(b.t);});
+  C.innerHTML='<div class="card" style="margin-bottom:1rem"><div class="rowflex" style="align-items:end"><div style="flex:2"><label for="ap-name">New appointment · who</label><input id="ap-name" placeholder="Client name"></div><div><label for="ap-type">Type</label><select id="ap-type"><option>Intake call</option><option>Signing consult</option><option>Case review</option><option>Home/hospital visit</option></select></div><div><label for="ap-when">When</label><input id="ap-when" type="datetime-local"></div><div style="flex:0;align-self:end"><button class="btn gold" id="ap-add" style="min-width:5rem">Add</button></div></div></div>'+
+    '<div class="card"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.8rem">Upcoming</h3><div class="twrap"><table><thead><tr><th>When</th><th>Client</th><th>Type</th><th></th></tr></thead><tbody>'+
+    (up.length?up.map(function(a){var d=new Date(a.t);return '<tr><td class="num">'+d.toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'</td><td><b>'+esc(a.name)+'</b></td><td>'+esc(a.type)+'</td><td><button class="btn sm" data-delap="'+a.id+'">Remove</button></td></tr>';}).join(''):'<tr><td colspan="4" class="muted">No appointments yet.</td></tr>')+'</tbody></table></div></div>';
+  $('#ap-add').onclick=function(){var nm=$('#ap-name').value.trim(),w=$('#ap-when').value;if(!nm||!w){toast('Name and time required');return;}S.appts.push({id:uid(),t:w,name:nm,type:$('#ap-type').value});log('Appointment: '+nm+' ('+$('#ap-type').value+')');fireTrigger('appointment_booked',{id:'',name:nm});save();renderCal(C);toast('Appointment added');};
+  $$('[data-delap]').forEach(function(b){b.onclick=function(){S.appts=S.appts.filter(function(x){return x.id!==b.dataset.delap;});save();renderCal(C);};});
+}
+
+/* ── AUTOMATIONS ── */
+var ACTION_LABELS={send_sms:'Send SMS',send_email:'Send email',wait:'Wait',create_task:'Create task',move_stage:'Move stage',add_tag:'Add tag',notify_team:'Notify team',webhook:'Webhook'};
+var TRIG_LABELS={lead_created:'New lead created',stage_changed:'Stage changed',appointment_booked:'Appointment booked'};
+function renderAuto(C){
+  if(C){C.innerHTML='<div style="display:flex;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap"><button class="btn gold" id="newwf">+ New workflow</button><span class="muted small" style="align-self:center">Workflows run automatically when their trigger fires — SMS, tasks, tagging, stage moves, waits, and webhooks all execute live.</span></div><div id="wflist"></div><div class="card" style="margin-top:1rem"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.6rem">Run log</h3><div class="runlog" id="runlog"></div></div>';}
+  var L=$('#wflist'); if(!L)return;
+  L.innerHTML=S.workflows.map(function(wf){
+    var flow='<div class="node trig">⚡ '+esc(TRIG_LABELS[wf.trigger.type]||wf.trigger.type)+(wf.trigger.stage?' ('+esc(wf.trigger.stage)+')':'')+'</div>';
+    wf.actions.forEach(function(a,idx){
+      var label=ACTION_LABELS[a.type]+(a.type==='send_sms'?' ('+(a.tpl||'')+')':a.type==='wait'?' '+a.mins+'m':a.type==='move_stage'?' → '+a.stage:a.type==='add_tag'?' "'+a.tag+'"':a.type==='create_task'?': '+(a.title||'').slice(0,20):'');
+      flow+='<span class="arrow">→</span><div class="node">'+esc(label)+' <span class="x" data-delact="'+wf.id+':'+idx+'">✕</span></div>';
+    });
+    return '<div class="wf"><div class="wf-head"><h3>'+esc(wf.name)+'</h3><span class="pill">'+(wf.channel==='make'?'make.com':'in-CRM')+'</span><span class="pill '+(wf.active?'ok':'')+'">'+(wf.active?'LIVE':'paused')+'</span><button class="toggle'+(wf.active?' on':'')+'" data-toggle="'+wf.id+'" aria-label="Toggle"></button><button class="btn sm danger" data-delwf="'+wf.id+'">Delete</button></div><div class="wf-flow">'+flow+'</div><div class="wf-add"><button class="btn sm" data-addact="'+wf.id+'">+ Add action</button><button class="btn sm ghost" data-testwf="'+wf.id+'">▶ Test run</button></div></div>';
+  }).join('')||'<p class="muted">No workflows yet. Create your first automation.</p>';
+  $('#runlog').innerHTML=S.runlog.slice(0,40).map(function(r){return '<div class="r"><span class="tt">'+ago(r.t)+'</span><span>'+esc(r.txt)+'</span></div>';}).join('')||'<p class="muted small">Nothing has run yet. Trigger a workflow or use “Test run”.</p>';
+  var nw=$('#newwf');if(nw)nw.onclick=newWorkflow;
+  $$('[data-toggle]').forEach(function(b){b.onclick=function(){var wf=S.workflows.find(function(w){return w.id===b.dataset.toggle;});wf.active=!wf.active;log('Workflow '+(wf.active?'activated':'paused')+': '+wf.name);save();renderAuto();};});
+  $$('[data-delwf]').forEach(function(b){b.onclick=function(){if(confirm('Delete this workflow?')){S.workflows=S.workflows.filter(function(w){return w.id!==b.dataset.delwf;});save();renderAuto();}};});
+  $$('[data-delact]').forEach(function(b){b.onclick=function(){var p=b.dataset.delact.split(':');var wf=S.workflows.find(function(w){return w.id===p[0];});wf.actions.splice(+p[1],1);save();renderAuto();};});
+  $$('[data-addact]').forEach(function(b){b.onclick=function(){addActionModal(b.dataset.addact);};});
+  $$('[data-testwf]').forEach(function(b){b.onclick=function(){var wf=S.workflows.find(function(w){return w.id===b.dataset.testwf;});var c=S.contacts[0];if(!c){toast('Add a contact first');return;}enroll(wf,c);save();renderAuto();toast('Test run started for '+c.name);};});
+}
+function newWorkflow(){
+  openModal('<h2 style="font-size:1.3rem;margin-bottom:1rem">New workflow</h2><label for="wf-name">Name</label><input id="wf-name" placeholder="e.g., Consult reminder"><label for="wf-chan">Where it runs</label><select id="wf-chan"><option value="crm">Command Center — contact &amp; call actions (SMS, tasks, tags)</option><option value="make">make.com — everything else (records, sheets, ops)</option></select><label for="wf-trig">When this happens (trigger)</label><select id="wf-trig"><option value="lead_created">New lead created</option><option value="stage_changed">Stage changed</option><option value="appointment_booked">Appointment booked</option></select><div id="wf-stagewrap" class="hidden"><label for="wf-stage">…to stage</label><select id="wf-stage">'+STAGES.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select></div><div class="rowflex" style="margin-top:1.2rem"><button class="btn gold" id="wf-create">Create</button><button class="btn ghost" id="wf-cancel">Cancel</button></div>');
+  $('#wf-trig').onchange=function(){$('#wf-stagewrap').classList.toggle('hidden',this.value!=='stage_changed');};
+  $('#wf-create').onclick=function(){var nm=$('#wf-name').value.trim();if(!nm){toast('Name it first');return;}var tr={type:$('#wf-trig').value};if(tr.type==='stage_changed')tr.stage=$('#wf-stage').value;S.workflows.push({id:uid(),name:nm,channel:$('#wf-chan').value,active:false,trigger:tr,actions:[]});log('Workflow created: '+nm);save();closeModal();renderAuto();toast('Workflow created — add actions, then flip it live');};
+  $('#wf-cancel').onclick=closeModal;
+}
+function addActionModal(wfId){
+  openModal('<h2 style="font-size:1.3rem;margin-bottom:1rem">Add action</h2><label for="ac-type">Action</label><select id="ac-type">'+Object.keys(ACTION_LABELS).map(function(k){return '<option value="'+k+'">'+ACTION_LABELS[k]+'</option>';}).join('')+'</select><div id="ac-param"></div><div class="rowflex" style="margin-top:1.2rem"><button class="btn gold" id="ac-add">Add</button><button class="btn ghost" id="ac-cancel">Cancel</button></div>');
+  function drawParam(){var t=$('#ac-type').value,h='';
+    if(t==='send_sms')h='<label>Message template</label><select id="ac-tpl"><option value="instant">Instant reply</option><option value="nudge">Follow-up nudge</option><option value="review">Review request</option><option value="consult">Consult reminder</option></select>';
+    else if(t==='wait')h='<label>Wait how many minutes?</label><input id="ac-mins" type="number" value="3" min="1">';
+    else if(t==='move_stage')h='<label>Move to stage</label><select id="ac-stage">'+STAGES.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>';
+    else if(t==='add_tag')h='<label>Tag</label><input id="ac-tag" placeholder="e.g., vip">';
+    else if(t==='create_task')h='<label>Task title</label><input id="ac-title" placeholder="e.g., Call within 5 minutes">';
+    $('#ac-param').innerHTML=h;}
+  $('#ac-type').onchange=drawParam;drawParam();
+  $('#ac-add').onclick=function(){var t=$('#ac-type').value,a={type:t};
+    if(t==='send_sms')a.tpl=$('#ac-tpl').value;else if(t==='wait')a.mins=+$('#ac-mins').value||1;else if(t==='move_stage')a.stage=$('#ac-stage').value;else if(t==='add_tag')a.tag=$('#ac-tag').value.trim()||'tag';else if(t==='create_task')a.title=$('#ac-title').value.trim()||'Follow up';
+    S.workflows.find(function(w){return w.id===wfId;}).actions.push(a);save();closeModal();renderAuto();};
+  $('#ac-cancel').onclick=closeModal;
+}
+
+/* ── REVIEWS ── */
+function renderRev(C){
+  var g=S.reviews.filter(function(r){return r.platform==='Google';}).map(function(r){return new Date(r.date);});
+  var ds=g.length?Math.floor((Date.now()-Math.max.apply(null,g))/864e5):null;
+  C.innerHTML='<div class="two-col"><div class="card" style="text-align:center;display:grid;place-content:center;gap:.4rem"><span class="big-serif num">'+(ds==null?'—':ds)+'</span><span class="muted small">days since last Google review</span>'+(ds==null?'<span class="pill warn">none logged</span>':ds>=14?'<span class="pill hot">18-day rule at risk</span>':'<span class="pill ok">healthy cadence</span>')+'</div>'+
+    '<div class="card"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.6rem">Log a review</h3><div class="rowflex" style="align-items:end"><div><label>Platform</label><select id="rv-plat"><option>Google</option><option>Yelp</option><option>BBB</option><option>Avvo</option></select></div><div><label>Stars</label><select id="rv-stars"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div><div><label>Name</label><input id="rv-name" placeholder="First + initial"></div><div style="flex:0;align-self:end"><button class="btn gold" id="rv-add">Log</button></div></div></div></div>'+
+    '<div class="card" style="margin-top:1rem"><div class="twrap"><table><thead><tr><th>Date</th><th>Platform</th><th>Stars</th><th>Reviewer</th><th>Replied</th></tr></thead><tbody>'+
+    S.reviews.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(r){return '<tr><td class="num">'+esc(r.date)+'</td><td>'+esc(r.platform)+'</td><td class="num">'+'★'.repeat(r.stars)+'</td><td>'+esc(r.name)+'</td><td>'+(r.responded?'<span class="pill ok">yes</span>':'<button class="btn sm" data-rvrep="'+r.id+'">Mark</button>')+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  $('#rv-add').onclick=function(){S.reviews.push({id:uid(),date:iso(Date.now()),platform:$('#rv-plat').value,stars:+$('#rv-stars').value,name:$('#rv-name').value.trim()||'—',responded:false});log('Review logged: '+$('#rv-plat').value+' '+$('#rv-stars').value+'★');save();renderRev(C);toast('Review logged');};
+  $$('[data-rvrep]').forEach(function(b){b.onclick=function(){var r=S.reviews.find(function(x){return x.id===b.dataset.rvrep;});r.responded=true;save();renderRev(C);};});
+}
+
+/* ── SETTINGS ── */
+function renderSet(C){
+  var st=S.settings;
+  C.innerHTML='<div class="two-col"><div class="card"><h3 style="color:#fff;font-size:1.05rem;margin-bottom:.3rem">Team &amp; routing</h3><label>Intake team (comma-separated)</label><input id="s-team" value="'+esc(st.team)+'"><label>Hot-case protocol</label><textarea id="s-proto" rows="2">'+esc(st.protocol)+'</textarea><label>Google review link</label><input id="s-rev" value="'+esc(st.reviewLink)+'"><button class="btn gold" id="s-save" style="margin-top:1rem">Save</button></div>'+
+    '<div class="card"><h3 style="color:#fff;font-size:1.05rem;margin-bottom:.3rem">Connections</h3><p class="muted small">Contact &amp; call automations run inside Command Center. Everything else runs in make.com — toggle each on the Automations page. If make.com is unreachable, Command Center queues a fallback.</p><label>Active agent (whoever is at this desk)</label><select id="s-agent">'+agentOpts(st.agent)+'</select><label>make.com webhook URL (non-contact automations)</label><input id="s-make" value="'+esc(st.makeWebhook||'')+'" placeholder="https://hook.make.com/xxxxxxxx"><label>Slack webhook URL (midnight EOD reports)</label><input id="s-slack" value="'+esc(st.slackWebhook||'')+'" placeholder="https://hooks.slack.com/services/..."><label>n8n / relay webhook URL (SMS send + inbound relay)</label><input id="s-wh" value="'+esc(st.webhook)+'" placeholder="https://your-n8n/webhook/ucl"><label>Inbound-call poll URL (rings the CRM on incoming calls)</label><input id="s-inpoll" value="'+esc(st.inboundPoll||'')+'" placeholder="https://your-relay/inbound-latest"><fieldset><legend>Twilio (optional)</legend><div class="rowflex"><div><label>Account SID</label><input id="s-sid" value="'+esc(st.twSid)+'" placeholder="AC…"></div><div><label>Auth token</label><input id="s-tok" type="password" value="'+esc(st.twToken)+'"></div><div><label>From number</label><input id="s-from" value="'+esc(st.twFrom)+'" placeholder="+1916…"></div></div></fieldset><div class="rowflex" style="margin-top:.8rem"><button class="btn" id="s-test">Send test event</button><button class="btn" id="s-eodnow">Send EOD to Slack now</button></div></div></div>'+
+    '<div class="card" style="margin-top:1rem"><h3 style="color:#fff;font-size:1.05rem;margin-bottom:.5rem">Data</h3><div class="rowflex"><button class="btn" id="s-exp">Export backup (JSON)</button><button class="btn" id="s-expcsv">Export contacts (CSV)</button><label class="btn" style="text-align:center;cursor:pointer">Import CSV<input id="s-imp" type="file" accept=".csv" style="display:none"></label><button class="btn danger" id="s-wipe">Erase all data</button></div><p class="muted small" style="margin-top:.6rem">Account: <b>'+esc(EMAIL)+'</b> · data is stored privately in this browser under your login. Export weekly; host the file for multi-device sync.</p></div>';
+  $('#s-save').onclick=function(){st.team=$('#s-team').value;st.protocol=$('#s-proto').value;st.reviewLink=$('#s-rev').value.trim();st.webhook=$('#s-wh').value.trim();st.makeWebhook=$('#s-make').value.trim();st.slackWebhook=$('#s-slack').value.trim();st.inboundPoll=$('#s-inpoll').value.trim();st.agent=$('#s-agent').value;st.twSid=$('#s-sid').value.trim();st.twToken=$('#s-tok').value.trim();st.twFrom=$('#s-from').value.trim();save();toast('Settings saved');};
+  var eod=$('#s-eodnow');if(eod)eod.onclick=function(){sendEOD(iso(Date.now()),true);};
+  $('#s-test').onclick=function(){st.webhook=$('#s-wh').value.trim();save();emit('test.ping',{note:'Hello from UCL Command Center'});toast('Test event sent (or queued if offline)');};
+  $('#s-exp').onclick=function(){dl('ucl-backup-'+iso(Date.now())+'.json',JSON.stringify(S,null,2),'application/json');};
+  $('#s-expcsv').onclick=exportCSV;
+  $('#s-imp').onchange=importCSV;
+  $('#s-wipe').onclick=function(){if(confirm('Erase ALL data for '+EMAIL+'? Export a backup first!')&&confirm('Really erase everything?')){S.contacts=[];S.threads={};S.calls=[];S.appts=[];S.reviews=[];S.tasks=[];S.runlog=[];S.enrollments=[];S.demo=false;log('All data erased');save();render();toast('Erased');}};
+}
+function dl(name,text,type){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},400);}
+function csvCell(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function exportCSV(){var head=['name','phone','email','caseType','language','source','stage','accidentDate','hot'];var rows=S.contacts.map(function(c){return [c.name,c.phone,c.email||'',c.caseType,c.language,c.source,c.stage,c.accidentDate||'',c.hot?'yes':''].map(csvCell).join(',');});dl('ucl-contacts.csv',head.join(',')+'\n'+rows.join('\n'),'text/csv');}
+function importCSV(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){var lines=String(rd.result).split(/\r?\n/).filter(Boolean);if(lines.length<2){toast('Empty CSV');return;}var head=lines[0].split(',').map(function(h){return h.trim().toLowerCase();});var ni=head.indexOf('name'),pi=head.indexOf('phone');if(ni<0||pi<0){toast('CSV needs name and phone columns');return;}var add=0;lines.slice(1).forEach(function(ln){var cols=ln.split(',');var nm=(cols[ni]||'').trim();if(!nm)return;S.contacts.push({id:uid(),createdAt:now(),name:nm,phone:(cols[pi]||'').replace(/\D/g,''),email:head.indexOf('email')>-1?(cols[head.indexOf('email')]||'').trim():'',caseType:head.indexOf('casetype')>-1?cols[head.indexOf('casetype')]:'Something else',language:head.indexOf('language')>-1?cols[head.indexOf('language')]:'English',source:'Import',stage:'New',hot:false,accidentDate:null,govClaim:false,tags:[],notes:[],firstResponseAt:null,assignedTo:''});add++;});log('Imported '+add+' contacts');save();render();toast('Imported '+add+' contacts');};rd.readAsText(f);}
+
+/* ── SOL helpers ── */
+function solDate(l){if(!l.accidentDate)return null;var d=new Date(l.accidentDate+'T12:00:00');if(l.govClaim)d.setMonth(d.getMonth()+6);else d.setFullYear(d.getFullYear()+2);return d;}
+function solDays(l){var d=solDate(l);return d?Math.floor((d-Date.now())/864e5):null;}
+function solCls(d){return d==null?'':d<=90?'sol-bad':d<=180?'sol-warn':'sol-ok';}
+
+/* ── CONTACT DRAWER ── */
+var openId=null;
+function openContact(id){
+  var l=S.contacts.find(function(x){return x.id===id;});if(!l)return;openId=id;
+  var d=solDays(l),sd=solDate(l);
+  $('#drawer-body').innerHTML='<h2 style="font-size:1.4rem;color:#fff">'+esc(l.name)+' '+(l.hot?'<span class="pill hot">HOT</span>':'')+'</h2><p class="small muted">created '+ago(l.createdAt)+' ago · '+esc(l.source)+'</p>'+
+    '<div class="rowflex" style="margin-top:.9rem"><button class="btn gold" data-call="'+l.id+'">📞 Call</button><button class="btn" data-conv="'+l.id+'">💬 Message</button>'+(l.firstResponseAt?'<span class="pill ok" style="align-self:center">responded '+ago(l.firstResponseAt)+' ago</span>':'<button class="btn" id="d-resp">✓ Mark contacted</button>')+'</div>'+
+    '<div class="rowflex"><div><label>Stage</label><select id="d-stage">'+STAGES.map(function(s){return '<option'+(s===l.stage?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div><div><label>Assigned to</label><select id="d-assign">'+agentOpts(l.assignedTo)+'</select></div></div>'+'<div class="rowflex"><div><label>Lead temperature</label><select id="d-temp">'+tempOpts(l.temp)+'</select></div><div><label>&nbsp;</label><div class="small muted" style="padding:.5rem 0">Cold → Warm → Contacted → Closed</div></div></div>'+
+    '<div class="rowflex"><div><label>Case type</label><select id="d-type">'+Object.values(CASE_LABELS).map(function(c){return '<option'+(c===l.caseType?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div><div><label>Language</label><select id="d-lang">'+['English','Español','Dari/Farsi','Urdu/Hindi','Arabic'].map(function(c){return '<option'+(c===l.language?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div></div>'+
+    '<div class="rowflex"><div><label>Phone</label><input id="d-phone" value="'+esc(l.phone)+'"></div><div><label>Email</label><input id="d-email" value="'+esc(l.email||'')+'"></div></div>'+
+    '<div class="rowflex"><div><label>Accident date</label><input id="d-acc" type="date" value="'+esc(l.accidentDate||'')+'"></div><div><label>SOL deadline</label><input disabled class="'+solCls(d)+'" value="'+(sd?sd.toISOString().slice(0,10)+' · '+d+'d':'—')+'"></div></div>'+
+    '<label style="display:flex;gap:.5rem;text-transform:none;font-size:.86rem;margin-top:.7rem;align-items:center"><input type="checkbox" id="d-gov" style="width:auto" '+(l.govClaim?'checked':'')+'> Government claim (6-month deadline)</label>'+
+    '<label style="display:flex;gap:.5rem;text-transform:none;font-size:.86rem;align-items:center"><input type="checkbox" id="d-hot" style="width:auto" '+(l.hot?'checked':'')+'> HOT — pages Sam</label>'+
+    '<label>Add note</label><div class="rowflex"><input id="d-note" placeholder="e.g., LVM, texted intake link"><button class="btn" id="d-addnote" style="flex:0">Add</button></div>'+
+    '<div style="margin-top:.6rem">'+(l.notes||[]).slice().reverse().map(function(n){return '<div class="note small">'+esc(n.txt)+'<div class="muted" style="font-size:.72rem">'+ago(n.t)+' ago</div></div>';}).join('')+'</div>'+
+    '<div class="rowflex" style="margin-top:1rem"><button class="btn gold" id="d-save">Save changes</button><button class="btn danger" id="d-del">Delete</button></div>';
+  $('#scrim2').classList.add('show');$('#drawer').classList.add('show');
+  var rp=$('#d-resp');if(rp)rp.onclick=function(){l.firstResponseAt=now();log('Contacted '+l.name);save();openContact(id);drawBoardIf();};
+  $('#d-addnote').onclick=function(){var v=$('#d-note').value.trim();if(v){l.notes=l.notes||[];l.notes.push({t:now(),txt:v});save();openContact(id);toast('Note added');}};
+  $('#d-save').onclick=function(){var os=l.stage;l.stage=$('#d-stage').value;l.assignedTo=$('#d-assign').value;l.temp=$('#d-temp').value;l.caseType=$('#d-type').value;l.language=$('#d-lang').value;l.phone=$('#d-phone').value.replace(/\D/g,'');l.email=$('#d-email').value.trim();l.accidentDate=$('#d-acc').value||null;l.govClaim=$('#d-gov').checked;l.hot=$('#d-hot').checked;if(os!==l.stage){log(l.name+': '+os+' → '+l.stage);fireTrigger('stage_changed',l,{stage:l.stage});}save();closeDrawer();render();toast('Saved');};
+  $('#d-del').onclick=function(){if(confirm('Delete '+l.name+'?')){S.contacts=S.contacts.filter(function(x){return x.id!==l.id;});delete S.threads[l.id];log('Deleted '+l.name);save();closeDrawer();render();}};
+}
+function closeDrawer(){openId=null;$('#scrim2').classList.remove('show');$('#drawer').classList.remove('show');}
+function drawBoardIf(){if(curView==='pipe')drawBoard();if(curView==='dash')renderDash($('#content'));}
+$('#dclose').onclick=closeDrawer;$('#scrim2').onclick=closeDrawer;
+
+/* ── NEW CONTACT ── */
+$('#newlead').onclick=function(){
+  openModal('<h2 style="font-size:1.3rem;margin-bottom:1rem">New contact</h2><div class="rowflex"><div><label>Name *</label><input id="n-name"></div><div><label>Phone *</label><input id="n-phone" inputmode="tel"></div></div><div class="rowflex"><div><label>Case type</label><select id="n-type">'+Object.values(CASE_LABELS).map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div><div><label>Language</label><select id="n-lang">'+['English','Español','Dari/Farsi','Urdu/Hindi','Arabic'].map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div></div><div class="rowflex"><div><label>Source</label><select id="n-src"><option>Website form</option><option>Phone call</option><option>LSA</option><option>Google Ads</option><option>Referral</option><option>Walk-in</option></select></div><div><label>Accident date</label><input id="n-acc" type="date"></div></div><label style="display:flex;gap:.5rem;text-transform:none;font-size:.86rem;margin-top:.8rem;align-items:center"><input type="checkbox" id="n-hot" style="width:auto"> HOT — catastrophic/commercial (pages Sam)</label><div class="rowflex" style="margin-top:1rem"><button class="btn gold" id="n-save">Save &amp; run automations</button><button class="btn ghost" id="n-cancel">Cancel</button></div>');
+  $('#n-save').onclick=function(){var nm=$('#n-name').value.trim(),ph=$('#n-phone').value.replace(/\D/g,'');if(!nm){toast('Name required');return;}if(ph.length<10){toast('10-digit phone required');return;}
+    var c={id:uid(),createdAt:now(),name:nm,phone:ph,email:'',caseType:$('#n-type').value,language:$('#n-lang').value,source:$('#n-src').value,stage:'New',temp:'cold',hot:$('#n-hot').checked,accidentDate:$('#n-acc').value||null,govClaim:false,tags:[],notes:[],firstResponseAt:null,assignedTo:S.settings.agent||''};
+    S.contacts.unshift(c);log('New contact: '+nm+(c.hot?' (HOT)':''));fireTrigger('lead_created',c);save();closeModal();render();toast(c.hot?'HOT lead saved — Sam paged, automations running':'Saved — automations running');};
+  $('#n-cancel').onclick=closeModal;
+};
+
+/* ── modal + global clicks + toast ── */
+function openModal(html){$('#modal-body').innerHTML=html;$('#modal').classList.add('show');$('#scrim2').classList.add('show');$('#scrim2').dataset.forModal='1';}
+function closeModal(){$('#modal').classList.remove('show');if($('#scrim2').dataset.forModal){$('#scrim2').classList.remove('show');delete $('#scrim2').dataset.forModal;}}
+document.addEventListener('click',function(e){
+  var mv=e.target.closest('[data-mv]');if(mv){var l=S.contacts.find(function(x){return x.id===mv.dataset.id;});var i=STAGES.indexOf(l.stage)+ +mv.dataset.mv;if(i>=0&&i<STAGES.length){var os=l.stage;l.stage=STAGES[i];log(l.name+': '+os+' → '+l.stage);fireTrigger('stage_changed',l,{stage:l.stage});save();drawBoardIf();}return;}
+  var cv=e.target.closest('[data-conv]');if(cv){activeThread=cv.dataset.conv;go('conv');setTimeout(function(){openThread(cv.dataset.conv);},30);return;}
+  var cl=e.target.closest('[data-call]');if(cl){var c=S.contacts.find(function(x){return x.id===cl.dataset.call;});if(c){dialNum=c.phone;placeCall(c.phone,c);}return;}
+  var op=e.target.closest('[data-open]');if(op){openContact(op.dataset.open);return;}
+});
+var toastEl=null,toastT=null;
+function toast(m){if(!toastEl){toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');document.body.appendChild(toastEl);}toastEl.textContent=m;requestAnimationFrame(function(){toastEl.classList.add('show');});clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('show');},2800);}
+
+/* ══════════ BOOT ══════════ */
+
+/* ══════════ LEAD TEMP + TEAM ══════════ */
+var TEMPS=['cold','warm','contacted','closed'];
+function tempBadge(t){if(!t)return '';var l={cold:'Cold',warm:'Warm',contacted:'Contacted',closed:'Closed'}[t]||t;return '<span class="pill temp-'+t+'">'+l+'</span>';}
+function tempOpts(cur){return TEMPS.map(function(t){return '<option value="'+t+'"'+(t===cur?' selected':'')+'>'+t.charAt(0).toUpperCase()+t.slice(1)+'</option>';}).join('');}
+function agentOpts(cur){var o='<option value="">— unassigned —</option>';(S.team||[]).forEach(function(a){o+='<option'+(a===cur?' selected':'')+'>'+esc(a)+'</option>';});return o;}
+function migrate(){
+  S.team=S.team||['Layla','Omar','Front Desk','Sam'];
+  S.settings.slackWebhook=S.settings.slackWebhook||'';
+  S.settings.makeWebhook=S.settings.makeWebhook||'';
+  S.settings.agent=S.settings.agent||(S.team[0]||'');
+  S.inbound=S.inbound||[];
+  S.workflows.forEach(function(w){if(!w.channel)w.channel='crm';});
+  if(!S.workflows.some(function(w){return w.trigger.type==='eod_midnight';})) S.workflows.push({id:'wf6',name:'Nightly EOD → Slack (per teammate)',channel:'crm',active:true,trigger:{type:'eod_midnight'},actions:[{type:'eod_slack'}]});
+  S.lastEOD=S.lastEOD||'';
+  var tmap={New:'cold',Contacted:'contacted',Consult:'warm',Signed:'closed',Declined:'closed'};
+  S.contacts.forEach(function(c){ if(!c.temp) c.temp=tmap[c.stage]||'cold'; });
+  S.calls.forEach(function(c){ if(!c.agent) c.agent = (/Connected/.test(c.disp||'')? (S.team[Math.floor(Math.random()*Math.min(2,S.team.length))]) : S.team[0]); if(!c.dir)c.dir='out'; });
+  save();
+}
+function renderTeam(C){
+  var team=S.team||[];
+  var today=iso(Date.now());
+  var rows=team.map(function(a){
+    var calls=S.calls.filter(function(c){return c.agent===a;});
+    var conn=calls.filter(function(c){return /Connected/.test(c.disp||'');}).length;
+    var todayCalls=calls.filter(function(c){return iso(c.t)===today;}).length;
+    var assigned=S.contacts.filter(function(c){return c.assignedTo===a;});
+    var signed=assigned.filter(function(c){return c.stage==='Signed';}).length;
+    return {a:a,calls:calls.length,conn:conn,today:todayCalls,assigned:assigned.length,signed:signed};
+  });
+  var totCalls=S.calls.length, totConn=S.calls.filter(function(c){return /Connected/.test(c.disp||'');}).length;
+  var totToday=S.calls.filter(function(c){return iso(c.t)===today;}).length;
+  C.innerHTML=
+   '<div class="teamgrid">'+
+     '<div class="tmtile"><span class="big num">'+team.length+'</span><div class="lbl">people on the team</div></div>'+
+     '<div class="tmtile"><span class="big num">'+totToday+'</span><div class="lbl">calls today</div></div>'+
+     '<div class="tmtile"><span class="big num">'+totCalls+'</span><div class="lbl">calls all-time</div></div>'+
+     '<div class="tmtile"><span class="big num">'+(totCalls?Math.round(totConn/totCalls*100):0)+'%</span><div class="lbl">connect rate</div></div>'+
+   '</div>'+
+   '<div class="card"><div class="rowflex" style="align-items:end;margin-bottom:.8rem"><div style="flex:1"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)">Who\'s calling how much</h3></div><div><label>Add teammate</label><div class="rowflex" style="gap:.4rem"><input id="tm-new" placeholder="Name" style="min-width:8rem"><button class="btn sm gold" id="tm-add">Add</button></div></div></div>'+
+     rows.map(function(r){return '<div class="agentrow"><div class="av">'+esc(initials(r.a))+'</div><div><b style="color:#fff">'+esc(r.a)+'</b><div class="small muted">'+r.assigned+' leads · '+r.signed+' signed</div></div><div class="st"><div><b class="num">'+r.today+'</b><span>today</span></div><div><b class="num">'+r.calls+'</b><span>calls</span></div><div><b class="num">'+r.conn+'</b><span>connected</span></div></div><button class="btn sm" data-tmdel="'+esc(r.a)+'" style="margin-inline-start:.6rem" title="Remove">✕</button></div>';}).join('')+
+   '</div>'+
+   '<p class="muted small" style="margin-top:.8rem">Every call and lead is attributed to the assigned teammate. Calls logged from the Dialer use the active agent set in Settings.</p>';
+  var add=$('#tm-add');if(add)add.onclick=function(){var v=($('#tm-new').value||'').trim();if(!v)return;if(S.team.indexOf(v)<0){S.team.push(v);log('Teammate added: '+v);save();renderTeam(C);}};
+  $$('[data-tmdel]').forEach(function(b){b.onclick=function(){if(confirm('Remove '+b.dataset.tmdel+' from the team roster? (their logged calls stay)')){S.team=S.team.filter(function(x){return x!==b.dataset.tmdel;});save();renderTeam(C);}};});
+}
+
+/* ══════════ CALL RECORDING ══════════ */
+var recState={rec:null,chunks:[],data:null};
+function wireRecorder(){
+  var btn=$('#cd-rec'); if(!btn)return;
+  btn.onclick=function(){
+    var st=$('#cd-recst');
+    if(recState.rec&&recState.rec.state==='recording'){recState.rec.stop();return;}
+    if(!navigator.mediaDevices||!window.MediaRecorder){st.textContent='Recorder not supported here — use the Twilio URL field for live calls.';return;}
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      recState.chunks=[];var mr=new MediaRecorder(stream);recState.rec=mr;
+      mr.ondataavailable=function(e){if(e.data.size)recState.chunks.push(e.data);};
+      mr.onstop=function(){var blob=new Blob(recState.chunks,{type:'audio/webm'});var fr=new FileReader();fr.onload=function(){recState.data=fr.result;st.textContent='Recording saved ('+Math.round(blob.size/1024)+' KB)';};fr.readAsDataURL(blob);stream.getTracks().forEach(function(t){t.stop();});btn.textContent='\u{1F534} Record call';};
+      mr.start();btn.textContent='\u23F9 Stop recording';st.textContent='Recording\u2026';
+    }).catch(function(){st.textContent='Mic blocked — use the Twilio URL field for live calls.';});
+  };
+}
+/* ══════════ INCOMING CALL ══════════ */
+var ring={active:false,ctx:null,beat:null,to:null,num:null,contact:null};
+function ringtone(on){
+  try{
+    if(on){
+      if(!ring.ctx)ring.ctx=new (window.AudioContext||window.webkitAudioContext)();
+      var ctx=ring.ctx; if(ctx.state==='suspended')ctx.resume();
+      function beep(){ [480,620].forEach(function(f,i){ var o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=f;o.connect(g);g.connect(ctx.destination);var t=ctx.currentTime+i*.4;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.09,t+.04);g.gain.exponentialRampToValueAtTime(.0001,t+.35);o.start(t);o.stop(t+.4);});}
+      beep(); ring.beat=setInterval(beep,2200);
+    } else { clearInterval(ring.beat); ring.beat=null; }
+  }catch(e){}
+}
+function incomingCall(num,name,contact){
+  ring.num=num; ring.contact=contact||matchContact(num);
+  var nm=name||(ring.contact&&ring.contact.name)||fmtPhone(num);
+  $('#ring-name').textContent=nm; $('#ring-num').textContent=fmtPhone(num); $('#ring-av').textContent=initials(nm);
+  $('#ringmodal').hidden=false; ring.active=true; ringtone(true);
+  clearTimeout(ring.to);
+  ring.to=setTimeout(function(){ if(ring.active){ logInbound(num,nm,'Missed — no answer',null); endRing(); toast('Missed call from '+nm);} },45000);
+}
+function endRing(){ring.active=false;$('#ringmodal').hidden=true;ringtone(false);clearTimeout(ring.to);}
+function logInbound(num,name,disp,rec){
+  var d=String(num).replace(/\D/g,'');
+  S.calls.unshift({id:uid(),t:now(),name:name||fmtPhone(d),phone:d,dir:'in',disp:disp,dur:disp.indexOf('Missed')===0?'—':'live',agent:S.settings.agent,recording:rec||''});
+  log('Inbound call: '+(name||fmtPhone(d))+' — '+disp); save();
+  if(curView==='dial')renderDial($('#content')); if(curView==='team')renderTeam($('#content'));
+}
+function simulateInbound(){
+  var pool=S.contacts.filter(function(c){return c.phone;});
+  if(pool.length){var c=pool[Math.floor(Math.random()*pool.length)];incomingCall(c.phone,c.name,c);}
+  else incomingCall('9165550123','Unknown caller',null);
+}
+function pollInbound(){
+  var url=(S.settings.inboundPoll||'').trim(); if(!url||ring.active)return;
+  try{fetch(url).then(function(r){return r.ok?r.json():null;}).then(function(j){ if(j&&j.from){ incomingCall(j.from, j.name||'', null); } }).catch(function(){});}catch(e){}
+}
+
+/* ══════════ make.com CHANNEL + SLACK EOD ══════════ */
+function fireMake(wf,contact){
+  var url=(S.settings.makeWebhook||'').trim();
+  var payload={workflow:wf.name,trigger:wf.trigger.type,contact:contact?{id:contact.id,name:contact.name,caseType:contact.caseType,stage:contact.stage,phone:contact.phone,language:contact.language}:null,at:now()};
+  if(!url){ S.outbox.push(Object.assign({dest:'make'},payload)); runLog(wf.name+' → make.com not configured — queued for CRM fallback'); save(); return; }
+  runLog(wf.name+' → sent to make.com'+(contact?' for '+contact.name:''));
+  try{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok){ runLog(wf.name+' → make.com error '+r.status+' — CRM fallback queued'); S.outbox.push(payload); save(); } },
+          function(){ runLog(wf.name+' → make.com unreachable — CRM fallback queued'); S.outbox.push(payload); save(); }); }
+  catch(e){ S.outbox.push(payload); }
+  save();
+}
+function postOne(url,body,done){ try{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(done,done); }catch(e){ done(); } }
+function sendEOD(dayISO,manual){
+  var day=dayISO||iso(Date.now()), team=S.team||[];
+  var msgs=team.map(function(a){
+    var calls=S.calls.filter(function(c){return c.agent===a&&iso(c.t)===day;});
+    var conn=calls.filter(function(c){return /Connected/.test(c.disp||'');}).length;
+    var newLeads=S.contacts.filter(function(c){return c.assignedTo===a&&iso(c.createdAt)===day;}).length;
+    var signed=S.contacts.filter(function(c){return c.assignedTo===a&&c.stage==='Signed';}).length;
+    var tasks=S.tasks.filter(function(t){return t.owner===a&&!t.done;}).length;
+    return {agent:a,text:':bust_in_silhouette: *'+a+'* — EOD '+day+'\n• Calls: '+calls.length+' ('+conn+' connected)\n• New leads: '+newLeads+'\n• Signed (total): '+signed+'\n• Open tasks: '+tasks};
+  });
+  runLog('EOD compiled for '+team.length+' teammates ('+day+')');
+  S.lastEOD=iso(Date.now()); save();
+  postSlackSeq(msgs,0,manual);
+}
+function postSlackSeq(msgs,i,manual){
+  if(i>=msgs.length){ if(manual)toast('EOD sent to Slack — '+msgs.length+' teammates'); if(curView==='auto')renderAuto(); return; }
+  var slack=(S.settings.slackWebhook||'').trim(), make=(S.settings.makeWebhook||'').trim(), m=msgs[i];
+  var next=function(){ setTimeout(function(){ postSlackSeq(msgs,i+1,manual); }, 500); };
+  if(slack){ postOne(slack,{text:m.text},next); }
+  else if(make){ postOne(make,{event:'eod',agent:m.agent,text:m.text},next); }
+  else { S.outbox.push({dest:'slack',agent:m.agent,text:m.text}); next(); }
+}
+function eodScheduler(){
+  if(!S){return;}
+  var active=S.workflows&&S.workflows.some(function(w){return w.active&&w.trigger.type==='eod_midnight';});
+  if(!active)return;
+  var today=iso(Date.now());
+  if(S.lastEOD!==today){ /* new day rolled over while app is open → send yesterday's EOD */
+    var y=iso(Date.now()-864e5);
+    sendEOD(y,false);
+  }
+}
+function boot(email){
+  EMAIL=email;DKEY='uclcc_data_'+email;S=load();
+  if(!S){seedData(email,accts()[email]?accts()[email].firm:'My Firm');S=load();}
+  S.enrollments=S.enrollments||[];S.runlog=S.runlog||[];S.outbox=S.outbox||[];S.threads=S.threads||{};migrate();
+  $('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
+  $('#acct-firm').textContent=S.firm||'My Firm';$('#acct-email').textContent=email;
+  go('dash');tickEnrollments();
+}
+var sess=localStorage.getItem(SESSKEY);
+if(sess&&accts()[sess]){boot(sess);}else{setMode('login');}
+})();
+</script>
