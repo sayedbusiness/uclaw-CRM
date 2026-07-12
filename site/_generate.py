@@ -546,7 +546,7 @@ PAGES = [
 ]
 
 def build_practice(pg):
-    canonical=f"https://uclaw.net/{pg['slug']}/"
+    canonical=f"https://uclaw.net/{pg['slug']}.html"
     schema=page_schema(pg['title'],pg['desc'],canonical,pg['service'],pg['stype'],pg['faqs'],pg['title'].split(' | ')[0])
     out=head(pg['title'],pg['desc'],canonical,schema)
     out+=f"""<main id="main">
@@ -610,7 +610,7 @@ TEAM=[
 ]
 
 def build_team():
-    canonical="https://uclaw.net/team/"
+    canonical="https://uclaw.net/team.html"
     members=",".join('{"@type":"Person","name":%s,"jobTitle":%s,"worksFor":{"@id":"https://uclaw.net/#firm"}}'%(_json(n),_json(r)) for _,n,r,_,_,_ in TEAM)
     schema='{"@context":"https://schema.org","@graph":[{"@type":"LegalService","@id":"https://uclaw.net/#firm","name":"United Citizen Law","telephone":"+1-916-800-8457","url":"https://uclaw.net/","employee":['+members+']},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://uclaw.net/"},{"@type":"ListItem","position":2,"name":"Our Team","item":"https://uclaw.net/team/"}]}]}'
     out=head("Meet Our Team | Sacramento Personal Injury Attorneys | United Citizen Law",
@@ -622,7 +622,7 @@ def build_team():
         if ext: meta.append(html.escape(ext))
         if email and '@' in email: meta.append(f'<a href="mailto:{email}">{email}</a>')
         meta.append(f'<a href="tel:{TEL}">{PHONE}</a>')
-        cards+=f'<div class="tcard"><div class="tcard-in"><img src="{av(slug)}" alt="{html.escape(name)}, {html.escape(role)} at United Citizen Law" width="88" height="88" loading="lazy"><h3>{html.escape(name)}</h3><span class="role">{html.escape(role)}</span><p>{html.escape(bio)}</p><div class="meta">{" · ".join(meta)}</div></div></div>'
+        cards+=f'<div class="tcard"><div class="tcard-in"><img src="./team/{slug}.jpg" alt="{html.escape(name)}, {html.escape(role)} at United Citizen Law" width="88" height="88" loading="lazy" decoding="async"><h3>{html.escape(name)}</h3><span class="role">{html.escape(role)}</span><p>{html.escape(bio)}</p><div class="meta">{" · ".join(meta)}</div></div></div>'
     out+=f"""<main id="main">
 <div class="wrap crumb"><a href="./index.html">Home</a> › <span>Our Team</span></div>
 <section class="phero"><div class="wrap wide">
