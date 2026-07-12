@@ -1,0 +1,533 @@
+{
+  "name": "UCL — CRM Events → Slack",
+  "flow": [
+    {
+      "id": 2,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": 2565475,
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "data": {
+                "editable": "true"
+              },
+              "label": "UCL CRM events"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hook",
+            "type": "hook:gateway-webhook",
+            "label": "Webhook",
+            "required": true
+          },
+          {
+            "name": "maxResults",
+            "type": "number",
+            "label": "Maximum number of results"
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        }
+      },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 4,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "New lead",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "lead_created"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"🔥 New lead — {{2.contact.name}} · {{2.contact.caseType}} case · {{2.contact.phone}} · lang: {{2.contact.language}}\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": -450
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 5,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "HOT lead → page Sam",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "lead_created"
+                    },
+                    {
+                      "a": "{{2.contact.caseType}}",
+                      "o": "text:equal",
+                      "b": "truck"
+                    }
+                  ],
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "lead_created"
+                    },
+                    {
+                      "a": "{{2.contact.caseType}}",
+                      "o": "text:equal",
+                      "b": "cat"
+                    }
+                  ],
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "lead_created"
+                    },
+                    {
+                      "a": "{{2.contact.caseType}}",
+                      "o": "text:equal",
+                      "b": "other"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"🚨 HOT LEAD — page Sam! {{2.contact.name}} · {{2.contact.caseType}} · {{2.contact.phone}}\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": -300
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 6,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "Case signed",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "stage_changed"
+                    },
+                    {
+                      "a": "{{2.contact.stage}}",
+                      "o": "text:equal",
+                      "b": "Signed"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"✅ CASE SIGNED — {{2.contact.name}} ({{2.contact.caseType}}). Auto-firing the medical-records request.\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": -150
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 7,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "New review",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "review_received"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"⭐ New review received — respond within the hour. ({{2.contact.name}})\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": 0
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 8,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "Nightly EOD",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "eod_midnight"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"📊 Nightly EOD — {{2.workflow}}\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": 150
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 9,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "SOL deadline",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "sol_alert"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"⏰ Statute-of-limitations deadline approaching — {{2.contact.name}} ({{2.contact.caseType}}). File soon.\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": 300
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 10,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": false,
+                "useNewZLibDeCompress": true
+              },
+              "filter": {
+                "name": "Stale lead sweep",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "stale_lead"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "ca": "",
+                "qs": [],
+                "url": "REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL",
+                "gzip": true,
+                "method": "post",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "timeout": "",
+                "useMtls": false,
+                "authPass": "",
+                "authUser": "",
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "serializeUrl": false,
+                "shareCookies": false,
+                "parseResponse": false,
+                "followRedirect": true,
+                "useQuerystring": false,
+                "followAllRedirects": false,
+                "rejectUnauthorized": true,
+                "data": "{\"text\": \"🕓 Stale lead (3+ days, no contact) — {{2.contact.name}} · {{2.contact.phone}}. Follow up today.\"}"
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": 450
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "slots": null,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us2.make.com",
+    "notes": []
+  }
+}
