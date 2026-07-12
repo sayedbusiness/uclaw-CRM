@@ -713,8 +713,8 @@ function renderCal(C){
 }
 
 /* ── AUTOMATIONS ── */
-var ACTION_LABELS={send_sms:'Send SMS',send_email:'Send email',wait:'Wait',create_task:'Create task',move_stage:'Move stage',add_tag:'Add tag',notify_team:'Notify team',webhook:'Webhook'};
-var TRIG_LABELS={lead_created:'New lead created',stage_changed:'Stage changed',appointment_booked:'Appointment booked'};
+var ACTION_LABELS={send_sms:'Send SMS',send_email:'Send email',wait:'Wait',create_task:'Create task',move_stage:'Move stage',add_tag:'Add tag',notify_team:'Notify team',webhook:'Webhook',eod_slack:'Send EOD to Slack'};
+var TRIG_LABELS={lead_created:'New lead created',stage_changed:'Stage changed',appointment_booked:'Appointment booked',eod_midnight:'Every night at midnight',call_logged:'Call logged',review_received:'Review received'};
 function renderAuto(C){
   if(C){C.innerHTML='<div style="display:flex;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap"><button class="btn gold" id="newwf">+ New workflow</button><span class="muted small" style="align-self:center">Workflows run automatically when their trigger fires — SMS, tasks, tagging, stage moves, waits, and webhooks all execute live.</span></div><div id="wflist"></div><div class="card" style="margin-top:1rem"><h3 style="font-family:var(--sans);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:.6rem">Run log</h3><div class="runlog" id="runlog"></div></div>';}
   var L=$('#wflist'); if(!L)return;
