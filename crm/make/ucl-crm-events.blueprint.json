@@ -1,5 +1,5 @@
 {
-  "name": "UCL — CRM Events → Slack",
+  "name": "UCL — CRM Events → Slack + Sheets",
   "flow": [
     {
       "id": 2,
@@ -104,7 +104,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": -450
+                  "y": -600
                 },
                 "restore": {},
                 "parameters": []
@@ -193,7 +193,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": -300
+                  "y": -450
                 },
                 "restore": {},
                 "parameters": []
@@ -258,7 +258,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": -150
+                  "y": -300
                 },
                 "restore": {},
                 "parameters": []
@@ -318,7 +318,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": 0
+                  "y": -150
                 },
                 "restore": {},
                 "parameters": []
@@ -378,7 +378,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": 150
+                  "y": 0
                 },
                 "restore": {},
                 "parameters": []
@@ -438,7 +438,7 @@
               "metadata": {
                 "designer": {
                   "x": 600,
-                  "y": 300
+                  "y": 150
                 },
                 "restore": {},
                 "parameters": []
@@ -498,7 +498,112 @@
               "metadata": {
                 "designer": {
                   "x": 600,
+                  "y": 300
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 11,
+              "module": "google-sheets:addRow",
+              "version": 2,
+              "parameters": {},
+              "filter": {
+                "name": "Lead → Sheet log",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "lead_created"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "from": "drive",
+                "mode": "select",
+                "spreadsheetId": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+                "sheetId": "Leads",
+                "includesHeaders": true,
+                "insertUnformatted": false,
+                "valueInputOption": "USER_ENTERED",
+                "insertDataOption": "INSERT_ROWS",
+                "values": {
+                  "0": "{{formatDate(now; 'YYYY-MM-DD HH:mm')}}",
+                  "1": "New lead",
+                  "2": "{{2.contact.name}}",
+                  "3": "{{2.contact.caseType}}",
+                  "4": "{{2.contact.phone}}",
+                  "5": "{{2.contact.language}}",
+                  "6": "{{2.contact.stage}}",
+                  "7": "{{2.workflow}}"
+                }
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
                   "y": 450
+                },
+                "restore": {},
+                "parameters": []
+              }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 12,
+              "module": "google-sheets:addRow",
+              "version": 2,
+              "parameters": {},
+              "filter": {
+                "name": "Signed → Sheet log",
+                "conditions": [
+                  [
+                    {
+                      "a": "{{2.trigger}}",
+                      "o": "text:equal",
+                      "b": "stage_changed"
+                    },
+                    {
+                      "a": "{{2.contact.stage}}",
+                      "o": "text:equal",
+                      "b": "Signed"
+                    }
+                  ]
+                ]
+              },
+              "mapper": {
+                "from": "drive",
+                "mode": "select",
+                "spreadsheetId": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+                "sheetId": "Leads",
+                "includesHeaders": true,
+                "insertUnformatted": false,
+                "valueInputOption": "USER_ENTERED",
+                "insertDataOption": "INSERT_ROWS",
+                "values": {
+                  "0": "{{formatDate(now; 'YYYY-MM-DD HH:mm')}}",
+                  "1": "Signed",
+                  "2": "{{2.contact.name}}",
+                  "3": "{{2.contact.caseType}}",
+                  "4": "{{2.contact.phone}}",
+                  "5": "{{2.contact.language}}",
+                  "6": "{{2.contact.stage}}",
+                  "7": "{{2.workflow}}"
+                }
+              },
+              "metadata": {
+                "designer": {
+                  "x": 600,
+                  "y": 600
                 },
                 "restore": {},
                 "parameters": []

@@ -4,3 +4,6 @@ node_modules/
 __pycache__/
 *.pyc
 .vercel
+
+# make.com blueprint with real Slack webhook (secret) — never commit
+crm/make/*.LIVE.blueprint.json
