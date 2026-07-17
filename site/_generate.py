@@ -15,6 +15,12 @@ def av96(name):
         return 'data:image/jpeg;base64,'+base64.b64encode(f.read()).decode()
 
 PHONE='(916) 800-8457'; TEL='+19168008457'
+# Supabase (anon key is public-by-design; RLS constrains what it can do)
+SB_URL='https://ulbybyuudermwyaucpdc.supabase.co'
+SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsYnlieXV1ZGVybXd5YXVjcGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDUxMjIsImV4cCI6MjA5OTgyMTEyMn0.11IrPB1C9SupOBOY0BSWLYW_YEvcfwaO1S0hNvk4WqI'
+ASSISTANT_TAGS=('<script>window.UCL_SB={u:%r,k:%r}</script>\n'
+                '<script src="./assistant-kb.js" defer></script>\n'
+                '<script src="./assistant.js" defer></script>\n') % (SB_URL, SB_ANON)
 
 CSS = r"""
 :root{
@@ -177,6 +183,8 @@ html.js .callbar.show{transform:translateY(0);opacity:1;pointer-events:auto}
 @media(max-width:22rem){.callbar{gap:.4rem}.callbar a{font-size:.82rem;padding:0 .45rem}}
 @media(prefers-reduced-motion:reduce){html.js .callbar{transition:opacity .3s ease}}
 @media(max-width:56rem){
+  /* fixed fade behind the floating language pills + nav so scrolled content never collides visually (z 80 < navwrap 90) */
+  body::before{content:"";position:fixed;top:0;left:0;right:0;height:8.6rem;z-index:80;pointer-events:none;background:linear-gradient(180deg,rgba(5,5,7,.97) 0%,rgba(5,5,7,.9) 52%,rgba(5,5,7,.5) 80%,rgba(5,5,7,0) 100%)}
   .topstrip{padding:.4rem .6rem 0}
   .langsw{gap:.1rem;padding:.2rem}
   .langsw button{padding:.5rem .62rem;font-size:.78rem;min-height:40px;display:inline-flex;align-items:center}
@@ -368,7 +376,7 @@ def end_and_footer(case):
 </nav>
 
 <script src="./i18n.js"></script>
-</body></html>"""
+{ASSISTANT_TAGS}</body></html>"""
 
 def faq_schema(faqs):
     items=",".join('{"@type":"Question","name":%s,"acceptedAnswer":{"@type":"Answer","text":%s}}'%(_json(q),_json(a)) for q,a in faqs)
@@ -867,3 +875,26 @@ if __name__=='__main__':
     with open(os.path.join(BASE,'sitemap.xml'),'w',encoding='utf-8') as f:
         f.write(sm)
     print('wrote sitemap.xml (%d urls)'%len(urls))
+    # ── assistant knowledge base (kept in lock-step with page content) ──
+    KW={'car':['car accident','car crash','rear end','rear-end','hit by a car','auto accident','collision','whiplash','t bone'],
+        'truck':['truck','semi','18 wheeler','big rig','commercial vehicle','trucking'],
+        'moto':['motorcycle','bike crash','rider','lane splitting','motorbike'],
+        'rideshare':['uber','lyft','rideshare','ride share'],
+        'ped':['pedestrian','crosswalk','hit while walking','bicycle','bike accident','cyclist','bicyclist'],
+        'dog':['dog bite','dog attack','bitten','animal attack'],
+        'slip':['slip and fall','slipped','wet floor','trip and fall','premises','fell at'],
+        'other':['wrongful death','died','passed away','fatal','killed','lost my husband','lost my wife','lost my son','lost my daughter'],
+        'cat':['catastrophic','brain injury','tbi','spinal cord','paralysis','amputation','severe injury','life changing injury']}
+    def _first_sentences(t,n=2,maxlen=340):
+        parts=[s.strip() for s in t.split('. ') if s.strip()]
+        out='. '.join(parts[:n])
+        if out and not out.endswith('.'): out+='.'
+        return out[:maxlen]
+    kb={'firm':{'phone':PHONE,'tel':TEL},
+        'cases':[{'label':l} for l in ['Car accident','Truck accident','Motorcycle','Rideshare (Uber/Lyft)','Pedestrian or bicycle','Dog bite','Slip & fall','Wrongful death','Something else']],
+        'pages':[{'slug':p['slug'],'title':p['title'].split('|')[0].strip(),
+                  'kw':KW.get(p['case'],[p['case']]),
+                  'blurb':_first_sentences(p['answer'])} for p in PAGES]}
+    with open(os.path.join(BASE,'assistant-kb.js'),'w',encoding='utf-8') as f:
+        f.write('window.UCL_KB='+json.dumps(kb,ensure_ascii=False)+';\n')
+    print('wrote assistant-kb.js (%d pages)'%len(kb['pages']))

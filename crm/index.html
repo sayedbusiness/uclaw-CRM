@@ -514,6 +514,7 @@ function doAction(a,c,wf){
 function runLog(txt){S.runlog.unshift({t:now(),txt:txt});S.runlog=S.runlog.slice(0,120);}
 function removeEnroll(en){S.enrollments=S.enrollments.filter(function(x){return x.id!==en.id;});}
 function tickEnrollments(){
+  if(!S)return; /* pre-login interval guard */
   var due=S.enrollments.filter(function(e){return e.nextAt<=Date.now();});
   if(!due.length)return;
   due.forEach(processEnrollment);
@@ -948,7 +949,7 @@ function simulateInbound(){
   if(pool.length){var c=pool[Math.floor(Math.random()*pool.length)];incomingCall(c.phone,c.name,c);}
   else incomingCall('9165550123','Unknown caller',null);
 }
-function pollInbound(){
+function pollInbound(){ if(!S)return;
   var url=(S.settings.inboundPoll||'').trim(); if(!url||ring.active)return;
   try{fetch(url).then(function(r){return r.ok?r.json():null;}).then(function(j){ if(j&&j.from){ incomingCall(j.from, j.name||'', null); } }).catch(function(){});}catch(e){}
 }
@@ -988,7 +989,7 @@ function postSlackSeq(msgs,i,manual){
   else if(make){ postOne(make,{event:'eod',agent:m.agent,text:m.text},next); }
   else { S.outbox.push({dest:'slack',agent:m.agent,text:m.text}); next(); }
 }
-function eodScheduler(){
+function eodScheduler(){ if(!S)return;
   if(!S){return;}
   var active=S.workflows&&S.workflows.some(function(w){return w.active&&w.trigger.type==='eod_midnight';});
   if(!active)return;
@@ -1010,3 +1011,284 @@ var sess=localStorage.getItem(SESSKEY);
 if(sess&&accts()[sess]){boot(sess);}else{setMode('login');}
 })();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* ═══════════ UCL CLOUD LAYER ═══════════
+ * Adds to the existing single-file CRM, without touching its internals:
+ *  • firm gate screen (access code before anything renders)
+ *  • real accounts on Supabase Auth (email allowlist enforced server-side;
+ *    signups go through the team-provision edge function)
+ *  • cloud persistence: the whole per-user store syncs to crm_state (RLS:
+ *    owner writes, admin reads all) — offline-first, debounced
+ *  • Command HQ overlay: website chat leads / appointments / queued SMS for
+ *    everyone, plus per-member live oversight for admins (Sam)
+ * Demo account (demo@uclaw.net) stays 100% local and never touches the cloud.
+ */
+(function(){
+'use strict';
+var SB_URL='https://ulbybyuudermwyaucpdc.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsYnlieXV1ZGVybXd5YXVjcGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDUxMjIsImV4cCI6MjA5OTgyMTEyMn0.11IrPB1C9SupOBOY0BSWLYW_YEvcfwaO1S0hNvk4WqI';
+var GATE_HASH='c0fde05e88c79396979f03610870fbedf19f6dfa43e691f50b6f81715026508d';
+var sb=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
+var $=function(s){return document.querySelector(s);};
+function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+async function sha256(s){var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');}
+
+/* ── styles ── */
+var css=''
++'#uclgate{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 120% at 50% -20%,#101014,#070708);padding:1.2rem}'
++'#uclgate .card{width:100%;max-width:24rem;background:#101014;border:1px solid rgba(212,167,44,.3);border-radius:1.3rem;padding:2.2rem 1.9rem;text-align:center;box-shadow:0 40px 100px rgba(0,0,0,.7)}'
++'#uclgate h1{font-family:Georgia,serif;font-weight:500;color:#fff;font-size:1.45rem;letter-spacing:.04em;margin:0 0 .3rem}'
++'#uclgate p{color:#9a9483;font-size:.88rem;margin:0 0 1.4rem}'
++'#uclgate input{width:100%;background:#17171c;border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:.8rem;padding:.85rem 1rem;font-size:16px;text-align:center;letter-spacing:.14em}'
++'#uclgate button{width:100%;margin-top: .9rem;background:linear-gradient(155deg,#f0cf6a,#d4a72c);border:none;color:#151004;font-weight:800;border-radius:999px;padding:.85rem;font-size:.95rem;cursor:pointer}'
++'#uclgate .err{color:#ff8d7a;font-size:.82rem;min-height:1.1rem;margin-top:.6rem}'
++'#uclgate .lock{width:3rem;height:3rem;border-radius:50%;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;background:rgba(212,167,44,.1);border:1px solid rgba(212,167,44,.35);color:#f0cf6a}'
++'#uclhq-btn{position:fixed;right:1rem;bottom:1rem;z-index:900;background:linear-gradient(155deg,#f0cf6a,#d4a72c);color:#151004;border:none;border-radius:999px;padding:.7rem 1.15rem;font-weight:800;font-size:.86rem;cursor:pointer;box-shadow:0 14px 34px rgba(0,0,0,.5);display:none}'
++'#uclhq{position:fixed;inset:0;z-index:3000;background:rgba(6,7,8,.8);backdrop-filter:blur(8px);display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:2rem 1rem}'
++'#uclhq .panel{width:100%;max-width:60rem;background:#0d0d10;border:1px solid rgba(212,167,44,.3);border-radius:1.3rem;padding:1.6rem;margin-bottom:2rem}'
++'#uclhq h2{font-family:Georgia,serif;color:#fff;font-weight:500;font-size:1.3rem;margin:0 0 .2rem}'
++'#uclhq h3{color:#f0cf6a;font-size:.82rem;letter-spacing:.16em;text-transform:uppercase;margin:1.4rem 0 .6rem}'
++'#uclhq .sub{color:#9a9483;font-size:.85rem;margin-bottom:.4rem}'
++'#uclhq .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.7rem}'
++'#uclhq .mem{background:#141418;border:1px solid rgba(255,255,255,.08);border-radius:.9rem;padding: .9rem 1rem}'
++'#uclhq .mem b{color:#fff;display:block;font-size:.95rem}'
++'#uclhq .mem .role{color:#f0cf6a;font-size:.74rem;font-weight:700}'
++'#uclhq .mem .st{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.5rem;font-size:.78rem;color:#bdb7a6}'
++'#uclhq .mem .st span b{display:inline;color:#f0cf6a;font-size:.95rem}'
++'#uclhq .row{display:flex;gap:.7rem;align-items:center;background:#141418;border:1px solid rgba(255,255,255,.07);border-radius:.8rem;padding:.7rem .9rem;margin-bottom:.5rem;font-size:.86rem;color:#d9d4c6;flex-wrap:wrap}'
++'#uclhq .row b{color:#fff}'
++'#uclhq .tag{font-size:.68rem;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:.18rem .6rem;background:rgba(61,220,132,.12);color:#3ddc84;border:1px solid rgba(61,220,132,.3)}'
++'#uclhq .tag.q{background:rgba(240,207,106,.1);color:#f0cf6a;border-color:rgba(240,207,106,.3)}'
++'#uclhq .x{float:right;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:50%;width:2.2rem;height:2.2rem;cursor:pointer}'
++'#uclhq .imp{background:linear-gradient(155deg,#f0cf6a,#d4a72c);border:none;color:#151004;font-weight:800;border-radius:999px;padding:.55rem 1rem;font-size:.8rem;cursor:pointer;margin-left:auto}'
++'#uclhq .empty{color:#77715f;font-size:.85rem;padding:.4rem 0}'
++'.ucl-sync{position:fixed;left:1rem;bottom:1rem;z-index:899;font-size:.72rem;color:#9a9483;background:rgba(13,13,16,.9);border:1px solid rgba(255,255,255,.1);padding:.35rem .7rem;border-radius:999px;display:none}';
+var st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
+
+/* ── 1. FIRM GATE ── */
+function needGate(){ try{return sessionStorage.getItem('uclcc_gate_ok')!=='1';}catch(e){return true;} }
+function showGate(){
+  var g=document.createElement('div');g.id='uclgate';
+  g.innerHTML='<div class="card"><div class="lock"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>'
+    +'<h1>UCL Command Center</h1><p>Enter the firm access code to continue.</p>'
+    +'<input id="uclgate-in" type="password" autocomplete="off" placeholder="Access code" aria-label="Firm access code">'
+    +'<button id="uclgate-go">Unlock</button><div class="err" id="uclgate-err"></div></div>';
+  document.body.appendChild(g);
+  var tries=0;
+  async function attempt(){
+    var v=$('#uclgate-in').value.trim(); if(!v)return;
+    var h='';try{h=await sha256(v);}catch(e){}
+    if(h===GATE_HASH){ try{sessionStorage.setItem('uclcc_gate_ok','1');sessionStorage.setItem('uclcc_gate_code',v);}catch(e){}
+      g.remove(); return; }
+    tries++; $('#uclgate-err').textContent='Wrong code'+(tries>2?' — ask Sam or Sayed for the current firm code.':'.');
+    $('#uclgate-in').value='';
+  }
+  $('#uclgate-go').onclick=attempt;
+  $('#uclgate-in').addEventListener('keydown',function(e){if(e.key==='Enter')attempt();});
+  setTimeout(function(){$('#uclgate-in').focus();},50);
+}
+if(needGate()) showGate();
+
+/* ── 2. CLOUD AUTH (replaces the local-only handler; demo stays local) ── */
+function localAcctStub(email){
+  try{
+    var A=JSON.parse(localStorage.getItem('uclcc_accounts'))||{};
+    if(!A[email]){A[email]={firm:'United Citizen Law',salt:'cloud',hash:'cloud-managed',createdAt:Date.now()};localStorage.setItem('uclcc_accounts',JSON.stringify(A));}
+  }catch(e){}
+}
+function authErr(m){var e=$('#auth-err');if(e){e.textContent=m;e.classList.add('show');}}
+var submitBtn=$('#auth-submit');
+if(submitBtn&&sb){
+  submitBtn.onclick=async function(){
+    var email=($('#au-email').value||'').trim().toLowerCase(), pw=$('#au-pass').value;
+    if(!email||!/.+@.+\..+/.test(email))return authErr('Enter a valid email.');
+    var signup=!$('#confirm-wrap').classList.contains('hidden');
+    /* demo short-circuit: keep the sample workspace fully local */
+    if(email==='demo@uclaw.net'){ 
+      submitBtn.textContent='One sec…';
+      try{
+        var A=JSON.parse(localStorage.getItem('uclcc_accounts'))||{};
+        if(!A[email]){A[email]={firm:'United Citizen Law',salt:'demo',hash:'demo',createdAt:Date.now()};localStorage.setItem('uclcc_accounts',JSON.stringify(A));}
+        localStorage.setItem('uclcc_session',email);
+      }catch(e){}
+      location.reload(); return;
+    }
+    if(pw.length<8)return authErr('Password must be at least 8 characters.');
+    submitBtn.disabled=true;submitBtn.textContent=signup?'Creating…':'Signing in…';
+    try{
+      if(signup){
+        if(pw!==$('#au-pass2').value){authErr('Passwords do not match.');return;}
+        var gate='';try{gate=sessionStorage.getItem('uclcc_gate_code')||'';}catch(e){}
+        var r=await fetch(SB_URL+'/functions/v1/team-provision',{method:'POST',
+          headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},
+          body:JSON.stringify({gate:gate,email:email,password:pw,full_name:($('#au-firm').value||'').trim()})});
+        var j=await r.json();
+        if(!j.ok){authErr(j.error||'Could not create the account.');return;}
+      }
+      var res=await sb.auth.signInWithPassword({email:email,password:pw});
+      if(res.error){authErr(signup?res.error.message:'Wrong email or password (accounts are cloud-managed now).');return;}
+      localAcctStub(email);
+      try{localStorage.setItem('uclcc_session',email);}catch(e){}
+      /* pull newest cloud copy before first paint */
+      try{
+        var q=await sb.from('crm_state').select('data,updated_at').eq('email',email).maybeSingle();
+        if(q.data&&q.data.data&&Object.keys(q.data.data).length){
+          localStorage.setItem('uclcc_data_'+email,JSON.stringify(q.data.data));
+          try{sessionStorage.setItem('uclcc_cloud_at',q.data.updated_at);}catch(e){}
+        }
+      }catch(e){}
+      location.reload();
+    }finally{ submitBtn.disabled=false; submitBtn.textContent=signup?'Create account':'Sign in'; }
+  };
+}
+
+/* ── 3. CLOUD SYNC (patch localStorage writes; debounce upsert) ── */
+var syncT=null, syncBadge=null, CUR={email:null,uid:null,role:null};
+function badge(txt){
+  if(!syncBadge){syncBadge=document.createElement('div');syncBadge.className='ucl-sync';document.body.appendChild(syncBadge);}
+  syncBadge.style.display='block';syncBadge.textContent=txt;
+  clearTimeout(badge._t);badge._t=setTimeout(function(){syncBadge.style.display='none';},2200);
+}
+function pushState(email){
+  if(!sb||!CUR.uid||email!==CUR.email)return;
+  clearTimeout(syncT);
+  syncT=setTimeout(async function(){
+    try{
+      var raw=localStorage.getItem('uclcc_data_'+email); if(!raw)return;
+      var data=JSON.parse(raw);
+      var r=await sb.from('crm_state').upsert({user_id:CUR.uid,email:email,data:data,updated_at:new Date().toISOString()});
+      badge(r.error?'⚠ sync failed':'☁ synced');
+    }catch(e){badge('⚠ sync failed');}
+  },2500);
+}
+var _set=localStorage.setItem.bind(localStorage);
+localStorage.setItem=function(k,v){
+  _set(k,v);
+  if(typeof k==='string'&&k.indexOf('uclcc_data_')===0){ pushState(k.slice('uclcc_data_'.length)); }
+};
+
+/* ── 4. SESSION INIT + COMMAND HQ ── */
+async function init(){
+  if(!sb)return;
+  var sess=(await sb.auth.getSession()).data.session;
+  var localEmail=null;try{localEmail=localStorage.getItem('uclcc_session');}catch(e){}
+  if(!sess||!localEmail||localEmail==='demo@uclaw.net')return;
+  if((sess.user.email||'').toLowerCase()!==localEmail.toLowerCase())return;
+  CUR.email=localEmail;CUR.uid=sess.user.id;
+  try{
+    var p=await sb.from('profiles').select('role,full_name,title').eq('user_id',CUR.uid).maybeSingle();
+    CUR.role=p.data?p.data.role:'member';
+  }catch(e){CUR.role='member';}
+  try{await sb.from('activities').insert({user_id:CUR.uid,email:CUR.email,type:'login',detail:{ua:navigator.userAgent.slice(0,80)}});}catch(e){}
+  /* newer cloud copy? adopt once per tab */
+  try{
+    var q=await sb.from('crm_state').select('data,updated_at').eq('user_id',CUR.uid).maybeSingle();
+    var seen=sessionStorage.getItem('uclcc_cloud_at')||'';
+    if(q.data&&q.data.updated_at&&q.data.updated_at!==seen){
+      var localRaw=localStorage.getItem('uclcc_data_'+CUR.email);
+      var cloudRaw=JSON.stringify(q.data.data||{});
+      sessionStorage.setItem('uclcc_cloud_at',q.data.updated_at);
+      if(cloudRaw.length>20&&cloudRaw!==localRaw){ _set('uclcc_data_'+CUR.email,cloudRaw); location.reload(); return; }
+    }
+  }catch(e){}
+  buildHQ();
+  badge('☁ connected as '+CUR.email+(CUR.role==='admin'?' (admin)':''));
+  /* first sync if cloud row missing */
+  pushState(CUR.email);
+}
+
+function hqBtn(){
+  var b=document.createElement('button');b.id='uclhq-btn';
+  b.textContent=CUR.role==='admin'?'🛰 Command HQ':'🌐 Website leads';
+  b.onclick=openHQ;document.body.appendChild(b);b.style.display='block';
+}
+function buildHQ(){
+  var o=document.createElement('div');o.id='uclhq';
+  o.innerHTML='<div class="panel"><button class="x" aria-label="Close">✕</button>'
+    +'<h2>'+(CUR.role==='admin'?'Command HQ':'Website activity')+'</h2>'
+    +'<div class="sub">'+(CUR.role==='admin'?'Live view of the whole firm — every teammate, every website lead.':'Live website leads and appointment requests from uclaw.net.')+'</div>'
+    +'<div id="uclhq-body">Loading…</div></div>';
+  document.body.appendChild(o);
+  o.querySelector('.x').onclick=function(){o.style.display='none';};
+  o.addEventListener('click',function(e){if(e.target===o)o.style.display='none';});
+  hqBtn();
+}
+async function openHQ(){
+  var o=$('#uclhq');o.style.display='flex';
+  var body=$('#uclhq-body');body.innerHTML='Loading…';
+  var html='';
+  try{
+    if(CUR.role==='admin'){
+      var profs=(await sb.from('profiles').select('user_id,email,full_name,title,role')).data||[];
+      var states=(await sb.from('crm_state').select('user_id,email,data,updated_at')).data||[];
+      var today=new Date();today.setHours(0,0,0,0);var t0=today.getTime();
+      html+='<h3>Team — live oversight</h3><div class="grid">';
+      if(!profs.length)html+='<div class="empty">No team accounts yet — share the access code UCLAW2026 and have everyone create their account.</div>';
+      profs.forEach(function(p){
+        var stt=null;states.forEach(function(s){if(s.user_id===p.user_id)stt=s;});
+        var d=stt&&stt.data?stt.data:null;
+        var contacts=d&&d.contacts?d.contacts.length:0;
+        var convos=0,msgs=0,calls=0;
+        if(d&&d.threads){Object.keys(d.threads).forEach(function(k){var th=d.threads[k]||[];if(th.length)convos++;th.forEach(function(m){if(m.t>=t0&&m.dir!=='note')msgs++;});});}
+        if(d&&d.calls){d.calls.forEach(function(c){if(c.t>=t0)calls++;});}
+        var last=stt?new Date(stt.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'never';
+        html+='<div class="mem"><b>'+esc(p.full_name||p.email)+'</b><span class="role">'+esc(p.title||p.role)+'</span>'
+          +'<div class="st"><span>👥 <b>'+contacts+'</b> contacts</span><span>💬 <b>'+convos+'</b> convos</span><span>✉️ <b>'+msgs+'</b> msgs today</span><span>📞 <b>'+calls+'</b> calls today</span></div>'
+          +'<div class="st"><span>Last sync: '+esc(last)+'</span></div></div>';
+      });
+      html+='</div>';
+    }
+    var leads=(await sb.from('chat_leads').select('*').order('created_at',{ascending:false}).limit(25)).data||[];
+    var appts=(await sb.from('appointments').select('*').order('created_at',{ascending:false}).limit(25)).data||[];
+    var notifs=(await sb.from('notifications').select('*').eq('status','queued').order('created_at',{ascending:false}).limit(15)).data||[];
+    html+='<h3 style="display:flex;align-items:center;gap: .6rem">Website chat leads'+(leads.length?'<button class="imp" id="uclhq-import">Import new into my contacts</button>':'')+'</h3>';
+    if(!leads.length)html+='<div class="empty">No website leads yet — they appear here the moment someone finishes the chat.</div>';
+    leads.forEach(function(l){html+='<div class="row"><b>'+esc(l.name||'—')+'</b><span>'+esc(l.phone||'')+'</span><span>'+esc(l.case_type||'')+'</span><span class="tag'+(l.status==='new'?'':' q')+'">'+esc(l.status)+'</span><span style="margin-left:auto;color:#77715f">'+new Date(l.created_at).toLocaleString()+'</span></div>';});
+    html+='<h3>Appointment requests</h3>';
+    if(!appts.length)html+='<div class="empty">No appointment requests yet.</div>';
+    appts.forEach(function(a){html+='<div class="row"><b>'+esc(a.name||'—')+'</b><span>'+esc(a.phone||'')+'</span><span>'+esc(a.preferred_text||'')+'</span><span class="tag q">SMS: '+esc(a.sms_status)+'</span><span style="margin-left:auto;color:#77715f">'+new Date(a.created_at).toLocaleString()+'</span></div>';});
+    html+='<h3>Queued SMS (send via Twilio/make.com)</h3>';
+    if(!notifs.length)html+='<div class="empty">Nothing queued — once Twilio is connected these send automatically.</div>';
+    notifs.forEach(function(n){html+='<div class="row"><b>'+esc(n.to_phone)+'</b><span style="flex:1">'+esc((n.body||'').slice(0,90))+'…</span><span class="tag q">'+esc(n.kind)+'</span></div>';});
+  }catch(e){ html+='<div class="empty">Could not load live data ('+esc(e.message||e)+').</div>'; }
+  body.innerHTML=html;
+  var imp=$('#uclhq-import');
+  if(imp)imp.onclick=function(){importLeads();};
+}
+async function importLeads(){
+  try{
+    var leads=(await sb.from('chat_leads').select('*').eq('status','new').order('created_at',{ascending:true}).limit(50)).data||[];
+    if(!leads.length){badge('No new leads');return;}
+    var key='uclcc_data_'+CUR.email;
+    var S=JSON.parse(localStorage.getItem(key));
+    S.importedLeads=S.importedLeads||[];
+    var added=0;
+    leads.forEach(function(l){
+      if(S.importedLeads.indexOf(l.id)>=0)return;
+      S.contacts.unshift({id:'web-'+l.id.slice(0,8),createdAt:new Date(l.created_at).getTime(),name:l.name||'Website lead',
+        phone:(l.phone||'').replace(/\D/g,''),email:l.email||'',caseType:l.case_type||'Something else',
+        language:l.lang==='es'?'Spanish':'English',source:'Website chat',stage:'New',hot:false,accidentDate:null,
+        govClaim:false,tags:['website'],notes:[{t:Date.now(),txt:'From website chat: '+(l.summary||'')}],firstResponseAt:null,assignedTo:''});
+      S.importedLeads.push(l.id);added++;
+    });
+    S.activity=S.activity||[];S.activity.unshift({t:Date.now(),txt:'Imported '+added+' website chat lead(s)'});
+    localStorage.setItem(key,JSON.stringify(S));
+    for(var i=0;i<leads.length;i++){ await sb.from('chat_leads').update({status:'in-crm'}).eq('id',leads[i].id); }
+    try{await sb.from('activities').insert({user_id:CUR.uid,email:CUR.email,type:'import_leads',detail:{count:added}});}catch(e){}
+    badge('Imported '+added+' lead(s)');
+    setTimeout(function(){location.reload();},900);
+  }catch(e){ badge('Import failed'); }
+}
+
+/* logout also clears the Supabase session */
+var lo=$('#logout');
+if(lo)lo.addEventListener('click',function(){
+  try{localStorage.removeItem('sb-ulbybyuudermwyaucpdc-auth-token');}catch(e){}
+},true);
+
+init();
+})();
+</script>
+</body>
+</html>
