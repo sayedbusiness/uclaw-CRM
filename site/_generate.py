@@ -27,7 +27,7 @@ CSS = r"""
   --sans:"Avenir Next","Avenir","Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:6.5rem}
+html{scroll-behavior:smooth;scroll-padding-top:6.5rem;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 html.bigtext{font-size:118%}
 body{background:var(--black);color:var(--body-d);font-family:var(--sans);line-height:1.75;font-size:1.075rem;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.1;letter-spacing:.004em;text-wrap:balance;color:var(--white)}
@@ -51,10 +51,18 @@ img{max-width:100%;height:auto}
 @keyframes vtOut{ to{ opacity:0; transform:translateY(-8px) } }
 @keyframes vtIn{ from{ opacity:0; transform:translateY(10px) } }
 /* ── scroll reveal (progressive-enhancement: visible without JS) ── */
-html.js .reveal{opacity:0;transform:translateY(24px);transition:opacity .85s var(--ease),transform .85s var(--ease)}
-html.js .reveal.in{opacity:1;transform:none}
-html.js .reveal.d1{transition-delay:.07s}html.js .reveal.d2{transition-delay:.14s}html.js .reveal.d3{transition-delay:.21s}html.js .reveal.d4{transition-delay:.28s}html.js .reveal.d5{transition-delay:.35s}
-@media(prefers-reduced-motion:reduce){html.js .reveal{opacity:1!important;transform:none!important;transition:none!important}}
+html.js .reveal{opacity:0;transform:translateY(26px);filter:blur(7px);transition:opacity .9s var(--ease),transform .9s var(--ease),filter .9s var(--ease);will-change:opacity,transform}
+html.js .reveal.in{opacity:1;transform:none;filter:blur(0)}
+html.js .reveal.d1{transition-delay:.08s}html.js .reveal.d2{transition-delay:.16s}html.js .reveal.d3{transition-delay:.24s}html.js .reveal.d4{transition-delay:.32s}html.js .reveal.d5{transition-delay:.4s}
+@media(prefers-reduced-motion:reduce){html.js .reveal{opacity:1!important;transform:none!important;filter:none!important;transition:none!important}}
+/* ── hero load-in: staggered entrance so the first thing a visitor sees is alive ── */
+@keyframes pheroRise{from{opacity:0;transform:translateY(24px);filter:blur(8px)}to{opacity:1;transform:none;filter:blur(0)}}
+html.js .phero .eyebrow,html.js .phero h1,html.js .phero .lede,html.js .phero .cta-row,html.js .phero .risk{animation:pheroRise .85s var(--ease) both}
+html.js .phero h1{animation-delay:.08s}
+html.js .phero .lede{animation-delay:.2s}
+html.js .phero .cta-row{animation-delay:.32s}
+html.js .phero .risk{animation-delay:.42s}
+@media(prefers-reduced-motion:reduce){html.js .phero .eyebrow,html.js .phero h1,html.js .phero .lede,html.js .phero .cta-row,html.js .phero .risk{animation:none}}
 .navwrap{position:fixed;top:2.5rem;left:0;right:0;z-index:90;display:flex;justify-content:center;padding-inline:1rem}
 .pillnav{display:flex;align-items:center;gap:1.3rem;background:rgba(13,13,16,.74);backdrop-filter:blur(22px);border:1px solid var(--hair-d);border-radius:999px;padding:.5rem .55rem .5rem 1.35rem;box-shadow:0 18px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);max-width:100%}
 .brand{font-family:var(--serif);font-size:1.05rem;color:var(--white);text-decoration:none;letter-spacing:.05em;white-space:nowrap;display:flex;align-items:center;gap:.55rem}
@@ -85,7 +93,7 @@ html.js .reveal.d1{transition-delay:.07s}html.js .reveal.d2{transition-delay:.14
 .eyebrow{display:inline-flex;align-items:center;gap:.5rem;border-radius:999px;padding:.32rem .95rem;font-size:.68rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;margin-bottom:1.3rem;background:rgba(212,167,44,.08);border:1px solid var(--hair-g);color:var(--gold-hi)}
 .eyebrow::before{content:"";width:.4rem;height:.4rem;border-radius:99px;background:currentColor}
 .phero h1{font-size:clamp(2.3rem,5vw,3.8rem);margin-bottom:1.1rem;position:relative}
-.phero h1 em{font-style:italic;background:linear-gradient(120deg,var(--gold-hi),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.phero h1 em{font-style:italic;color:var(--gold-hi)}
 .phero .lede{font-size:1.2rem;max-width:44rem;color:var(--body-d);margin-bottom:1.7rem;position:relative}
 .phero .cta-row{display:flex;flex-wrap:wrap;gap:1rem;position:relative}
 .phero .risk{margin-top:1rem;font-size:.92rem;color:var(--mute-d);position:relative}
@@ -156,14 +164,18 @@ footer.site a{color:#cfcaba;text-decoration:none}footer.site a:hover{color:var(-
 footer.site address{font-style:normal;line-height:1.85}
 .legal{border-top:1px solid rgba(255,255,255,.06);padding-block:1.5rem;font-size:.76rem;color:#6f6a5c}
 /* sticky mobile call */
-.callbar{position:fixed;bottom:calc(.55rem + env(safe-area-inset-bottom));left:.6rem;right:.6rem;z-index:95;display:none;grid-template-columns:1.15fr 1fr;gap:.5rem}
-.callbar a{display:flex;align-items:center;justify-content:center;gap:.4rem;height:52px;padding:0 .7rem;font-weight:800;text-decoration:none;font-size:.92rem;line-height:1;white-space:nowrap;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:transform .5s cubic-bezier(.16,1,.3,1)}
-.callbar a:active{transform:scale(.96)}
+.callbar{position:fixed;bottom:calc(.55rem + env(safe-area-inset-bottom));left:.6rem;right:.6rem;z-index:95;display:none;grid-template-columns:1.12fr 1fr;gap:.5rem}
+.callbar a{display:flex;align-items:center;justify-content:center;gap:.4rem;height:54px;min-width:0;padding:0 .7rem;font-weight:800;text-decoration:none;font-size:.92rem;line-height:1;white-space:nowrap;overflow:hidden;border-radius:999px;box-shadow:0 12px 34px rgba(0,0,0,.55);transition:transform .5s cubic-bezier(.16,1,.3,1)}
+.callbar a span{overflow:hidden;text-overflow:ellipsis}
+.callbar a:active{transform:scale(.955)}
 .callbar a svg{flex:none}
 .callbar .c1{background:linear-gradient(155deg,var(--gold-hi),var(--gold));color:#151004}
-.callbar .c2{background:rgba(13,13,16,.92);backdrop-filter:blur(14px);color:var(--white);border:1px solid var(--hair-d)}
-@media(max-width:48rem){.callbar{display:grid}body{padding-bottom:4.7rem}}
-@media(max-width:22rem){.callbar{gap:.4rem}.callbar a{font-size:.82rem;padding:0 .5rem}}
+.callbar .c2{background:rgba(13,13,16,.94);backdrop-filter:blur(14px);color:var(--white);border:1px solid var(--hair-d)}
+html.js .callbar{transform:translateY(160%);opacity:0;pointer-events:none;transition:transform .55s cubic-bezier(.16,1,.3,1),opacity .4s ease}
+html.js .callbar.show{transform:translateY(0);opacity:1;pointer-events:auto}
+@media(max-width:48rem){.callbar{display:grid}body{padding-bottom:calc(4.9rem + env(safe-area-inset-bottom))}}
+@media(max-width:22rem){.callbar{gap:.4rem}.callbar a{font-size:.82rem;padding:0 .45rem}}
+@media(prefers-reduced-motion:reduce){html.js .callbar{transition:opacity .3s ease}}
 @media(max-width:56rem){
   .topstrip{padding:.4rem .6rem 0}
   .langsw{gap:.1rem;padding:.2rem}
@@ -189,6 +201,25 @@ footer.site address{font-style:normal;line-height:1.85}
 .tcard-in p{font-size:.95rem;color:var(--body-d);margin-bottom:.7rem}
 .tcard-in .meta{font-size:.85rem;color:var(--mute-d);border-top:1px solid var(--hair-d);padding-top:.8rem;margin-top:.8rem}
 .tcard-in .meta a{color:var(--gold-hi)}
+.tcard-in .viewstory{display:inline-flex;align-items:center;gap:.4rem;margin-top:.55rem;color:var(--gold-hi);font-weight:700;font-size:.9rem;font-family:var(--sans);text-decoration:none;transition:gap .4s var(--ease)}
+.tcard-in .viewstory:hover{gap:.65rem}
+/* ── individual team member pages ── */
+.memhero-grid{display:grid;grid-template-columns:auto 1fr;gap:clamp(1.6rem,4vw,3.4rem);align-items:center}
+@media(max-width:44rem){.memhero-grid{grid-template-columns:1fr;text-align:center;justify-items:center}}
+.memphoto{width:clamp(9.5rem,27vw,13.5rem);height:clamp(12rem,34vw,17rem);border-radius:1.4rem;object-fit:cover;object-position:top;border:1px solid var(--hair-g);box-shadow:0 34px 74px -32px rgba(0,0,0,.75)}
+.mem-role{color:var(--gold-hi);font-weight:700;font-family:var(--sans);font-size:1rem;letter-spacing:.02em;display:block;margin-bottom:.9rem}
+.mem-tags{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1.3rem}
+@media(max-width:44rem){.mem-tags{justify-content:center}}
+.mem-tag{font-size:.8rem;font-weight:700;color:var(--gold-hi);background:rgba(214,176,102,.09);border:1px solid rgba(214,176,102,.24);padding:.34rem .82rem;border-radius:999px;font-family:var(--sans)}
+.mem-contact{display:flex;flex-wrap:wrap;gap:.55rem 1.5rem;margin-top:1.4rem;font-size:1rem;color:var(--body-d)}
+.mem-contact a{color:var(--gold-hi);font-weight:600}
+.focusgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.85rem;margin-top:1.5rem}
+.focusitem{display:flex;align-items:center;gap:.75rem;background:var(--coal);border:1px solid var(--hair-d);border-radius:.95rem;padding:.95rem 1.15rem;font-size:.98rem;color:var(--body-d);transition:transform .5s var(--ease),border-color .5s var(--ease)}
+.focusitem:hover{transform:translateY(-3px);border-color:var(--hair-g)}
+.prose.light .focusitem{background:#fff;border-color:rgba(122,94,11,.16);color:var(--body-l)}
+.focusitem svg{flex:none;color:var(--gold-hi)}
+.mem-back{display:inline-flex;align-items:center;gap:.5rem;margin-top:2rem;color:var(--gold-hi);font-weight:700;font-family:var(--sans);text-decoration:none;transition:gap .4s var(--ease)}
+.mem-back:hover{gap:.75rem}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
 """
 
@@ -333,7 +364,7 @@ def end_and_footer(case):
 
 <nav class="callbar" aria-label="Quick contact">
   <a class="c1" href="tel:{TEL}"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.6 15.6 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.2 2.2Z"/></svg><span data-i18n="bar.call">Call now — free</span></a>
-  <a class="c2" href="./index.html#review-{case}"><span data-i18n="bar.review">Free case review</span></a>
+  <a class="c2" href="./index.html#review-{case}"><span data-i18n="bar.review">Free review</span></a>
 </nav>
 
 <script src="./i18n.js"></script>
@@ -679,6 +710,86 @@ TEAM=[
   "clients@uclaw.net"),
 ]
 
+# Per-member enrichment for the individual story pages. Facts are drawn only from
+# the real bios above — languages listed only where explicitly stated.
+MEMBER_EXTRA={
+ "sam-fareed":{"first":"Sam","tagline":"The lawyer who's been in your seat — and built the firm he couldn't find.",
+   "langs":["English"],"focus":["Serious & catastrophic injury","Trial strategy & litigation","Insurance-company negotiation","Wrongful-death claims"]},
+ "shereen-ghaith":{"first":"Shereen","tagline":"Business, communications, and law — brought together for injured clients.",
+   "langs":["English"],"focus":["Personal-injury litigation","Client consultations","Legal research & drafting","Settlement negotiation"]},
+ "homaira-laila-fareed":{"first":"Laila","tagline":"With the firm since the start of her career — now handling cases end to end.",
+   "langs":["English"],"focus":["Client consultations","Legal research","Settlement negotiation","Court representation"]},
+ "zahid-sher-fareed":{"first":"Zahid","tagline":"Making sure every client feels heard from the very first call.",
+   "langs":["English"],"focus":["Client liaison & care","Pre-litigation oversight","Team leadership & training"]},
+ "abdul-wardak":{"first":"Abdul","tagline":"Often the first voice you'll hear — in English, Dari, or Pashto.",
+   "langs":["English","Dari","Pashto"],"focus":["New-client intake","Case coordination","Multilingual client care"]},
+ "richard-prasad":{"first":"Richard","tagline":"The detail work that keeps demands sharp and cases moving.",
+   "langs":["English"],"focus":["Demand drafting","Medical-records analysis","Filing complaints"]},
+ "roya-fareed":{"first":"Roya","tagline":"The financial strength that keeps the firm ready for trial.",
+   "langs":["English"],"focus":["Financial operations","Trial-readiness capital","Strategic planning"]},
+ "yasir-albadran":{"first":"Yasir","tagline":"Clear, precise support — with dedicated help for Arabic-speaking clients.",
+   "langs":["English","Arabic"],"focus":["Document management","Scheduling & coordination","Arabic-speaking client care"]},
+ "jesse-fareed":{"first":"Jesse","tagline":"In the field, making sure nothing falls through the cracks.",
+   "langs":["English"],"focus":["Field case support","Client transportation","Keeping cases on time"]},
+}
+
+def build_member(idx):
+    slug,name,role,ext,bio,email = TEAM[idx]
+    x=MEMBER_EXTRA[slug]; first=x["first"]
+    canonical=f"https://uclaw.net/team-{slug}.html"
+    img=f"https://uclaw.net/team/{slug}.jpg"
+    person={"@type":"Person","@id":canonical+"#person","name":name.replace("“",'"').replace("”",'"'),
+            "jobTitle":role,"worksFor":{"@type":"LegalService","@id":"https://uclaw.net/#firm","name":"United Citizen Law"},
+            "image":img,"url":canonical,"knowsLanguage":x["langs"],"telephone":"+1-916-800-8457"}
+    if email and '@' in email: person["email"]=email
+    crumbs={"@type":"BreadcrumbList","itemListElement":[
+        {"@type":"ListItem","position":1,"name":"Home","item":"https://uclaw.net/"},
+        {"@type":"ListItem","position":2,"name":"Our Team","item":"https://uclaw.net/team.html"},
+        {"@type":"ListItem","position":3,"name":name.replace("“",'"').replace("”",'"'),"item":canonical}]}
+    schema='{"@context":"https://schema.org","@graph":['+_json(person)+','+_json(crumbs)+']}'
+    disp_name=html.escape(name)
+    title=f"{name} — {role} | United Citizen Law Sacramento".replace("“",'"').replace("”",'"')
+    desc=(f"{name}, {role} at United Citizen Law in Sacramento. "+bio.split('. ')[0]+'.').replace("“",'"').replace("”",'"')
+    out=head(title, desc, canonical, schema)
+    # language chips
+    tags="".join(f'<span class="mem-tag">{html.escape(l)}</span>' for l in x["langs"])
+    # contact line
+    cparts=[]
+    if ext: cparts.append(html.escape(ext))
+    if email and '@' in email: cparts.append(f'<a href="mailto:{email}" dir="ltr">{email}</a>')
+    cparts.append(f'<a href="tel:{TEL}" dir="ltr">{PHONE}</a>')
+    contact=" ".join(f'<span>{c}</span>' for c in cparts)
+    # focus grid
+    chk='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'
+    focus="".join(f'<div class="focusitem">{chk}<span>{html.escape(f)}</span></div>' for f in x["focus"])
+    out+=f"""<main id="main">
+<div class="wrap crumb"><a href="./index.html">Home</a> › <a href="./team.html">Our Team</a> › <span>{disp_name}</span></div>
+<section class="phero"><div class="wrap wide">
+  <div class="memhero-grid">
+    <img class="memphoto" src="./team/{slug}.jpg" alt="{disp_name}, {html.escape(role)} at United Citizen Law" width="320" height="480" fetchpriority="high" decoding="async">
+    <div>
+      <span class="eyebrow">United Citizen Law</span>
+      <h1>{disp_name}</h1>
+      <span class="mem-role">{html.escape(role)}</span>
+      <div class="mem-tags" aria-label="Languages">{tags}</div>
+      <p class="lede">{html.escape(x['tagline'])}</p>
+      <div class="cta-row">{call_btn()}{review_btn('car', cls='btn-ghost')}</div>
+      <div class="mem-contact">{contact}</div>
+    </div>
+  </div>
+</div></section>
+<section class="prose light"><div class="wrap wide">
+  <h2 class="reveal">{first}'s story</h2>
+  <p class="reveal d1" style="max-width:44rem">{html.escape(bio)}</p>
+  <h2 class="reveal" style="margin-top:2.4rem">What {first} handles</h2>
+  <div class="focusgrid reveal d1">{focus}</div>
+  <a class="mem-back reveal" href="./team.html">← Meet the rest of the team</a>
+</div></section>
+</main>
+"""
+    out+=end_and_footer('car')
+    return out
+
 def build_team():
     canonical="https://uclaw.net/team.html"
     members=",".join('{"@type":"Person","name":%s,"jobTitle":%s,"worksFor":{"@id":"https://uclaw.net/#firm"}}'%(_json(n),_json(r)) for _,n,r,_,_,_ in TEAM)
@@ -686,13 +797,19 @@ def build_team():
     out=head("Meet Our Team | Sacramento Personal Injury Attorneys | United Citizen Law",
              "Meet the United Citizen Law team — attorneys, case managers, and staff serving Sacramento in English, Spanish, Dari, Pashto, Urdu, Hindi, and Arabic. Real people who answer your call and build your case.",
              canonical, schema)
-    cards=""
-    for idx,(slug,name,role,ext,bio,email) in enumerate(TEAM):
+    def card(idx):
+        slug,name,role,ext,bio,email = TEAM[idx]
         meta=[]
         if ext: meta.append(html.escape(ext))
         if email and '@' in email: meta.append(f'<a href="mailto:{email}">{email}</a>')
         meta.append(f'<a href="tel:{TEL}">{PHONE}</a>')
-        cards+=f'<div class="tcard reveal d{(idx%4)+1}"><div class="tcard-in"><img src="./team/{slug}.jpg" alt="{html.escape(name)}, {html.escape(role)} at United Citizen Law" width="88" height="88" loading="lazy" decoding="async"><h3>{html.escape(name)}</h3><span class="role">{html.escape(role)}</span><p>{html.escape(bio)}</p><div class="meta">{" · ".join(meta)}</div></div></div>'
+        first=MEMBER_EXTRA[slug]["first"]
+        bio_short=bio if len(bio)<=210 else bio[:207].rsplit(' ',1)[0]+'…'
+        return f'<div class="tcard reveal d{(idx%4)+1}"><div class="tcard-in"><img src="./team/{slug}.jpg" alt="{html.escape(name)}, {html.escape(role)} at United Citizen Law" width="88" height="88" loading="lazy" decoding="async"><h3>{html.escape(name)}</h3><span class="role">{html.escape(role)}</span><p>{html.escape(bio_short)}</p><a class="viewstory" href="./team-{slug}.html">Read {html.escape(first)}\'s story <span aria-hidden="true">&rarr;</span></a><div class="meta">{" · ".join(meta)}</div></div></div>'
+    att_idx=[i for i,(s,n,r,*_ ) in enumerate(TEAM) if 'Attorney' in r]
+    staff_idx=[i for i in range(len(TEAM)) if i not in att_idx]
+    att_cards="".join(card(i) for i in att_idx)
+    staff_cards="".join(card(i) for i in staff_idx)
     out+=f"""<main id="main">
 <div class="wrap crumb"><a href="./index.html">Home</a> › <span>Our Team</span></div>
 <section class="phero"><div class="wrap wide">
@@ -702,7 +819,10 @@ def build_team():
   <div class="cta-row">{call_btn()}{review_btn('car', cls='btn-ghost')}</div>
 </div></section>
 <section class="prose" style="padding-top:1rem"><div class="wrap wide">
-  <div class="teamgrid">{cards}</div>
+  <h2 class="reveal">Attorneys</h2>
+  <div class="teamgrid" style="margin-top:1.4rem">{att_cards}</div>
+  <h2 class="reveal" style="margin-top:3rem">Client services &amp; support</h2>
+  <div class="teamgrid" style="margin-top:1.4rem">{staff_cards}</div>
 </div></section>
 </main>
 """
@@ -729,3 +849,21 @@ if __name__=='__main__':
     with open(os.path.join(BASE,'team.html'),'w',encoding='utf-8') as f:
         f.write(build_team())
     print('wrote team.html')
+    for i,(slug,*_rest) in enumerate(TEAM):
+        with open(os.path.join(BASE,f'team-{slug}.html'),'w',encoding='utf-8') as f:
+            f.write(build_member(i))
+        print('wrote', f'team-{slug}.html')
+    # ── sitemap.xml (kept in lock-step with the pages above) ──
+    import datetime
+    today=datetime.date.today().isoformat()
+    urls=[("https://uclaw.net/","weekly","1.0")]
+    urls+=[(f"https://uclaw.net/{p['slug']}.html","monthly","0.9") for p in PAGES]
+    urls.append(("https://uclaw.net/team.html","monthly","0.7"))
+    urls+=[(f"https://uclaw.net/team-{slug}.html","monthly","0.6") for slug,*_ in TEAM]
+    sm='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for loc,cf,pr in urls:
+        sm+=f'  <url>\n    <loc>{loc}</loc>\n    <lastmod>{today}</lastmod>\n    <changefreq>{cf}</changefreq>\n    <priority>{pr}</priority>\n  </url>\n'
+    sm+='</urlset>\n'
+    with open(os.path.join(BASE,'sitemap.xml'),'w',encoding='utf-8') as f:
+        f.write(sm)
+    print('wrote sitemap.xml (%d urls)'%len(urls))
