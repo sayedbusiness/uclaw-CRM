@@ -1196,6 +1196,8 @@ async function init(){
   badge('☁ connected as '+CUR.email+(CUR.role==='admin'?' (admin)':''));
   /* first sync if cloud row missing */
   pushState(CUR.email);
+  /* website chat leads flow straight into the pipeline */
+  autoImportBoot();
 }
 
 function hqBtn(){
@@ -1256,29 +1258,65 @@ async function openHQ(){
   var imp=$('#uclhq-import');
   if(imp)imp.onclick=function(){importLeads();};
 }
-async function importLeads(){
-  try{
-    var leads=(await sb.from('chat_leads').select('*').eq('status','new').order('created_at',{ascending:true}).limit(50)).data||[];
-    if(!leads.length){badge('No new leads');return;}
-    var key='uclcc_data_'+CUR.email;
-    var S=JSON.parse(localStorage.getItem(key));
-    S.importedLeads=S.importedLeads||[];
-    var added=0;
-    leads.forEach(function(l){
-      if(S.importedLeads.indexOf(l.id)>=0)return;
-      S.contacts.unshift({id:'web-'+l.id.slice(0,8),createdAt:new Date(l.created_at).getTime(),name:l.name||'Website lead',
-        phone:(l.phone||'').replace(/\D/g,''),email:l.email||'',caseType:l.case_type||'Something else',
-        language:l.lang==='es'?'Spanish':'English',source:'Website chat',stage:'New',hot:false,accidentDate:null,
-        govClaim:false,tags:['website'],notes:[{t:Date.now(),txt:'From website chat: '+(l.summary||'')}],firstResponseAt:null,assignedTo:''});
-      S.importedLeads.push(l.id);added++;
-    });
-    S.activity=S.activity||[];S.activity.unshift({t:Date.now(),txt:'Imported '+added+' website chat lead(s)'});
+/* Shared import core: website chat leads → this user's contacts.
+   Returns how many were added. Never reloads by itself. */
+async function doImport(){
+  var leads=(await sb.from('chat_leads').select('*').eq('status','new').order('created_at',{ascending:true}).limit(50)).data||[];
+  if(!leads.length)return 0;
+  var key='uclcc_data_'+CUR.email;
+  var S=JSON.parse(localStorage.getItem(key)||'null'); if(!S)return 0;
+  S.importedLeads=S.importedLeads||[];
+  var added=0;
+  leads.forEach(function(l){
+    if(S.importedLeads.indexOf(l.id)>=0)return;
+    var hot=/wrongful death|catastrophic/i.test(l.case_type||'');
+    S.contacts.unshift({id:'web-'+l.id.slice(0,8),createdAt:new Date(l.created_at).getTime(),name:l.name||'Website lead',
+      phone:(l.phone||'').replace(/\D/g,''),email:l.email||'',caseType:l.case_type||'Something else',
+      language:l.lang==='es'?'Spanish':'English',source:'Website chat',stage:'New',hot:hot,accidentDate:null,
+      govClaim:false,tags:['website'],notes:[{t:Date.now(),txt:'From website chat: '+(l.summary||'')}],firstResponseAt:null,assignedTo:''});
+    S.importedLeads.push(l.id);added++;
+  });
+  if(added){
+    S.activity=S.activity||[];S.activity.unshift({t:Date.now(),txt:'⚡ '+added+' website chat lead(s) auto-added'});
     localStorage.setItem(key,JSON.stringify(S));
-    for(var i=0;i<leads.length;i++){ await sb.from('chat_leads').update({status:'in-crm'}).eq('id',leads[i].id); }
-    try{await sb.from('activities').insert({user_id:CUR.uid,email:CUR.email,type:'import_leads',detail:{count:added}});}catch(e){}
-    badge('Imported '+added+' lead(s)');
-    setTimeout(function(){location.reload();},900);
+  }
+  for(var i=0;i<leads.length;i++){ await sb.from('chat_leads').update({status:'in-crm'}).eq('id',leads[i].id); }
+  try{if(added)await sb.from('activities').insert({user_id:CUR.uid,email:CUR.email,type:'import_leads',detail:{count:added}});}catch(e){}
+  return added;
+}
+async function importLeads(){ /* HQ button */
+  try{
+    var n=await doImport();
+    badge(n?('Imported '+n+' lead(s)'):'No new leads');
+    if(n)setTimeout(function(){location.reload();},900);
   }catch(e){ badge('Import failed'); }
+}
+/* Auto-flow: new website leads become contacts the moment you open the CRM,
+   and a live watcher offers one-click adds while you work. */
+async function autoImportBoot(){
+  try{
+    var n=await doImport();
+    if(n>0){ badge('⚡ '+n+' website lead(s) added to your pipeline'); setTimeout(function(){location.reload();},800); return; }
+  }catch(e){}
+  startLeadWatch();
+}
+function startLeadWatch(){
+  setInterval(async function(){
+    try{
+      var r=await sb.from('chat_leads').select('id',{count:'exact',head:true}).eq('status','new');
+      if((r.count||0)>0)showLeadToast(r.count);
+    }catch(e){}
+  },60000);
+}
+function showLeadToast(n){
+  var t=document.getElementById('ucl-leadtoast');
+  if(t){t.textContent='⚡ '+n+' new website lead'+(n>1?'s':'')+' — tap to add';return;}
+  t=document.createElement('button');t.id='ucl-leadtoast';
+  t.style.cssText='position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:3500;background:linear-gradient(155deg,#f0cf6a,#d4a72c);color:#151004;border:none;border-radius:999px;padding:.7rem 1.2rem;font-weight:800;font-size:.88rem;cursor:pointer;box-shadow:0 16px 40px rgba(0,0,0,.55)';
+  t.textContent='⚡ '+n+' new website lead'+(n>1?'s':'')+' — tap to add';
+  t.onclick=async function(){ t.disabled=true;t.textContent='Adding…';
+    try{var c=await doImport();badge('Imported '+c+' lead(s)');location.reload();}catch(e){t.remove();badge('Import failed');} };
+  document.body.appendChild(t);
 }
 
 /* logout also clears the Supabase session */
